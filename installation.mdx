@@ -1,0 +1,225 @@
+---
+title: Installation
+description: Get BotTroner up and running on your system
+---
+
+BotTroner is a high-performance Discord bot built with modern technologies. This guide will walk you through the installation process.
+
+## Prerequisites
+
+Before installing BotTroner, ensure you have the following:
+
+<Steps>
+  <Step title="Bun Runtime">
+    BotTroner uses [Bun](https://bun.sh) as its JavaScript runtime. Install Bun v1.1 or higher:
+    
+    <CodeGroup>
+    ```bash macOS/Linux
+    curl -fsSL https://bun.sh/install | bash
+    ```
+    
+    ```powershell Windows
+    powershell -c "irm bun.sh/install.ps1 | iex"
+    ```
+    </CodeGroup>
+    
+    Verify the installation:
+    ```bash
+    bun --version
+    ```
+  </Step>
+
+  <Step title="TypeScript">
+    TypeScript 5.9.2 or higher is required:
+    ```bash
+    bun add -g typescript
+    ```
+  </Step>
+
+  <Step title="Database">
+    BotTroner requires a MySQL or MariaDB database. Ensure you have one of the following:
+    - MySQL 8.0+
+    - MariaDB 10.5+
+    
+    <Note>
+      The bot uses Prisma ORM with the MariaDB adapter for database operations.
+    </Note>
+  </Step>
+
+  <Step title="Discord Bot Token">
+    Create a Discord application and bot:
+    1. Go to the [Discord Developer Portal](https://discord.com/developers/applications)
+    2. Click "New Application" and give it a name
+    3. Navigate to the "Bot" section
+    4. Click "Add Bot" and confirm
+    5. Copy the bot token (you'll need this later)
+    
+    <Warning>
+      Keep your bot token secret! Never commit it to version control.
+    </Warning>
+  </Step>
+</Steps>
+
+## Installation Steps
+
+<Steps>
+  <Step title="Clone the Repository">
+    Clone BotTroner from GitHub:
+    ```bash
+    git clone https://github.com/troner14/BotTroner.git
+    cd BotTroner
+    ```
+  </Step>
+
+  <Step title="Install Dependencies">
+    Install all required packages using Bun:
+    ```bash
+    bun install
+    ```
+    
+    This will install:
+    - `discord.js` (v14.23.2) - Discord API wrapper
+    - `@prisma/client` (v7.0.1) - Database ORM
+    - `@prisma/adapter-mariadb` (v7.1.0) - MariaDB adapter
+    - `pino` (v10.1.0) - Structured logging
+    - `dotenv` (v17.2.3) - Environment variable management
+    - `html-minifier-terser` (v7.2.0) - HTML optimization for transcripts
+    
+    <Info>
+      Development dependencies like `pino-pretty` and `@types/bun` are automatically installed.
+    </Info>
+  </Step>
+
+  <Step title="Environment Configuration">
+    Create your environment configuration file:
+    ```bash
+    cp .env.example .env
+    ```
+    
+    See the [Configuration](/configuration) page for detailed information on environment variables.
+  </Step>
+
+  <Step title="Database Setup">
+    Generate the Prisma client and set up your database schema:
+    
+    <CodeGroup>
+    ```bash Generate Prisma Client
+    bunx prisma generate
+    ```
+    
+    ```bash Push Schema to Database
+    bunx prisma db push
+    ```
+    </CodeGroup>
+    
+    The Prisma client will be generated in the `generated/prisma` directory.
+    
+    <Note>
+      The `db push` command synchronizes your database schema with the Prisma schema without creating migrations. This is ideal for development.
+    </Note>
+    
+    <Warning>
+      Ensure your `DATABASE_URL` is correctly configured in `.env` before running these commands.
+    </Warning>
+  </Step>
+
+  <Step title="Generate Type Files (Optional)">
+    BotTroner includes utility scripts to generate TypeScript types:
+    
+    ```bash
+    bun run script:folder        # Generate folder type definitions
+    bun run script:translation   # Generate translation types
+    bun run script:permissions   # Generate permission ID types
+    ```
+    
+    These scripts ensure type safety across the codebase.
+  </Step>
+
+  <Step title="Start the Bot">
+    Launch BotTroner:
+    ```bash
+    bun start
+    ```
+    
+    You should see output indicating the bot has started successfully:
+    ```
+    [INFO] bot started in XXXms
+    ```
+    
+    <Info>
+      The bot uses a graceful shutdown handler to properly clean up resources when stopped.
+    </Info>
+  </Step>
+</Steps>
+
+## Verification
+
+To verify your installation:
+
+1. Check that the bot appears online in Discord
+2. Review the console logs for any errors
+3. Test a basic command to ensure the bot responds
+
+## Development Commands
+
+For development purposes, BotTroner provides several useful commands:
+
+```bash
+# Run tests
+bun test
+
+# Run tests in watch mode
+bun test:watch
+
+# Run tests with coverage
+bun test:coverage
+
+# Run unit tests only
+bun test:unit
+
+# Run integration tests only
+bun test:integration
+
+# Update database schema
+bun run update:db
+```
+
+## Troubleshooting
+
+### Database Connection Issues
+
+If you encounter database connection errors:
+
+1. Verify your `DATABASE_URL` format in `.env`
+2. Ensure your database server is running
+3. Check that the database user has proper permissions
+4. Test the connection using your database client
+
+### Prisma Generation Errors
+
+If `prisma generate` fails:
+
+1. Check that your `schema.prisma` file is valid
+2. Ensure the output directory has write permissions
+3. Try deleting the `generated` folder and regenerating
+
+### Bot Won't Start
+
+If the bot fails to start:
+
+1. Verify your Discord token is correct
+2. Check the console logs for specific error messages
+3. Ensure all dependencies are installed
+4. Verify your Node environment doesn't conflict with Bun
+
+<Note>
+  For production deployments, consider using a process manager like PM2 or running the bot in a containerized environment.
+</Note>
+
+## Next Steps
+
+Now that BotTroner is installed, proceed to:
+
+- [Configuration](/configuration) - Learn about environment variables and settings
+- [Core Features](/features/virtualization) - Explore the bot's capabilities
+- [Architecture](/architecture/overview) - Understand the modular system

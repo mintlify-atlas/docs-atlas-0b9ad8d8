@@ -1,0 +1,442 @@
+---
+title: Ticket System
+description: Professional support ticket system with categories, transcripts, and user management
+icon: ticket
+---
+
+The Ticket System provides a complete support solution for Discord servers, allowing users to create private support channels with customizable categories, automatic transcripts, and user feedback collection.
+
+## Overview
+
+BotTroner's ticket system creates private channels for support requests, manages permissions automatically, and generates HTML transcripts when tickets are closed.
+
+<CardGroup cols={2}>
+  <Card title="Category System" icon="folder-tree">
+    Organize tickets by type with custom categories
+  </Card>
+  <Card title="Auto Transcripts" icon="file-code">
+    Generate and save HTML transcripts of all conversations
+  </Card>
+  <Card title="User Feedback" icon="star">
+    Collect opinions when tickets are closed
+  </Card>
+  <Card title="Permission Control" icon="lock">
+    Add/remove users from tickets with role-based access
+  </Card>
+</CardGroup>
+
+## Core Architecture
+
+The ticket system is implemented in the `Tickets` class:
+
+```typescript
+// From: src/class/tickets/tickets.ts
+class Tickets {
+    private readonly client: ExtendedClient;
+    private readonly transcripter: Transcripter;
+    
+    async setup(guildId: string)
+    async newTicket(interaction, client, categ, ticketInfo)
+    async close(interaction, client, Opinion)
+    async addUser(interaction, client, member)
+    async removeUser(interaction, client, member)
+}
+```
+
+## Setup
+
+### `/tickets setup`
+
+Initialize the ticket system in your server.
+
+**Options:**
+- `channel` (optional) - Channel where the ticket creation button will be sent
+
+**Example:**
+```
+/tickets setup channel:#tickets
+```
+
+This creates an embed with a button that users can click to open tickets:
+
+```typescript
+// From: src/class/tickets/tickets.ts:32
+const ticketMsg = new EmbedBuilder()
+    .setTitle('Tickets')
+    .setDescription(tDescMsg)
+    .setColor(0x00AE86)
+    .setFooter({ text: `created by Troner14` })
+    .setTimestamp();
+
+const newticket = new ButtonBuilder()
+    .setCustomId('ticket-new')
+    .setLabel('Crear ticket')
+    .setStyle(ButtonStyle.Primary);
+```
+
+<Note>
+The setup message is persistent - if the bot restarts, it will update the existing message rather than creating a new one.
+</Note>
+
+## Creating Tickets
+
+### `/tickets new`
+
+Create a new support ticket manually (alternative to the button).
+
+**Options:**
+- `category` (required) - Category ID for the ticket type
+- `lang` (required) - Preferred language for support
+- `descripcio` (required) - Description of the issue
+
+**Example:**
+```
+/tickets new category:1 lang:"English" descripcio:"Need help with setup"
+```
+
+### How It Works
+
+1. **Validation**: Checks if user already has an open ticket in that category
+```typescript
+// From: src/class/tickets/tickets.ts:139
+const nTickets = await tickets.count({
+    where: {
+        usrId: interaction.user.id,
+        category: categ,
+        closed: false
+    }
+});
+
+if (nTickets >= 1) {
+    throw new TicketsErrors("ticketArleadyOpen");
+}
+```
+
+2. **Channel Creation**: Creates a private channel with appropriate permissions
+```typescript
+// From: src/class/tickets/tickets.ts:153
+const perms: OverwriteResolvable[] = [
+    {
+        id: interaction.guild!.roles.everyone,
+        deny: [permission.ViewChannel, permission.SendMessages]
+    },
+    {
+        id: interaction.user.id,
+        allow: [permission.ViewChannel, permission.SendMessages, 
+                permission.ReadMessageHistory, permission.AddReactions]
+    }
+];
+```
+
+3. **Role Integration**: Automatically adds users with `ticket:view` permission
+```typescript
+// From: src/class/tickets/tickets.ts:172
+const ticketsRoles = await perfil_permisos.findMany({
+    where: {
+        permisos: { name: "ticket:view" }
+    }
+});
+```
+
+4. **Database Entry**: Saves ticket to database
+```typescript
+// From: src/class/tickets/tickets.ts:204
+const res = await tickets.create({
+    data: {
+        guildId: interaction.guild!.id,
+        channelId: channel.id,
+        usrId: interaction.user.id,
+        category: categ,
+    }
+});
+```
+
+## Closing Tickets
+
+### `/tickets close`
+
+Close the current ticket channel.
+
+**Example:**
+```
+/tickets close
+```
+
+### Close Process
+
+When a ticket is closed:
+
+1. **Opinion Modal** (for ticket owner):
+```typescript
+// From: src/class/tickets/tickets.ts:294
+const modal = new ModalBuilder()
+    .setCustomId(`ticket-suggest-modal`)
+    .setTitle(tModalTitle);
+
+const opinionInput = new TextInputBuilder()
+    .setCustomId('opinion')
+    .setLabel(tModalInput)
+    .setStyle(TextInputStyle.Paragraph);
+```
+
+2. **Transcript Generation**:
+```typescript
+// From: src/class/tickets/tickets.ts:331
+const transcript = await this.transcripter.generateTranscript(channel);
+const transcriptBuff = Buffer.from(transcript, "utf-8");
+const transcriptAtt = new AttachmentBuilder(transcriptBuff, {
+    name: `${tickets.guildId}-${tickets.usrId}-transcript.html`
+});
+```
+
+3. **Database Update**:
+```typescript
+// From: src/class/tickets/tickets.ts:356
+await client.prisma.tickets.update({
+    where: { id: tickets.id },
+    data: { closed: true }
+});
+```
+
+4. **Transcript Distribution**:
+   - Sent to the ticket owner via DM
+   - Sent to configured transcript channel
+   - Includes button for feedback (if applicable)
+
+<Tip>
+Transcripts are generated in HTML format and include full message history with formatting, attachments, and timestamps.
+</Tip>
+
+## Category Management
+
+### `/tickets category new`
+
+Create a new ticket category.
+
+**Options:**
+- `name` (required) - Category name
+- `description` (required) - Category description
+- `categdiscid` (optional) - Discord category ID where tickets will be created
+
+**Example:**
+```
+/tickets category new name:"Technical Support" description:"For technical issues" categdiscid:"123456789"
+```
+
+```typescript
+// From: src/class/tickets/tickets.ts:95
+async newTicketCateg(guildId: string, name: string, description: string, categoryId?: string) {
+    await this.client.prisma.tickets_categories.create({
+        data: {
+            guildId,
+            name,
+            description,
+            CategId: categoryId
+        }
+    })
+}
+```
+
+### `/tickets category set`
+
+Modify an existing ticket category.
+
+**Options:**
+- `categid` (required) - Category ID to modify
+- `name` (optional) - New category name
+- `description` (optional) - New description
+- `categdiscid` (optional) - New Discord category ID
+
+**Example:**
+```
+/tickets category set categid:1 name:"General Support"
+```
+
+## Configuration
+
+### `/tickets config transcript`
+
+Set the channel where transcripts will be sent.
+
+**Options:**
+- `channel` (required) - Channel for transcripts
+
+**Example:**
+```
+/tickets config transcript channel:#ticket-logs
+```
+
+### `/tickets config opinions`
+
+Set the channel where user feedback will be sent.
+
+**Options:**
+- `channel` (required) - Channel for opinions
+
+**Example:**
+```
+/tickets config opinions channel:#feedback
+```
+
+## User Management
+
+### `/tickets user add`
+
+Add a user to the current ticket.
+
+**Options:**
+- `user` (required) - User or role to add
+
+**Example:**
+```
+/tickets user add user:@Moderator
+```
+
+**Permission Required:** `ticket:adduser`
+
+```typescript
+// From: src/class/tickets/tickets.ts:418
+await channel.permissionOverwrites.create(member.id, {
+    ViewChannel: true,
+    SendMessages: true,
+    ReadMessageHistory: true,
+    AddReactions: true,
+    AttachFiles: true
+})
+```
+
+### `/tickets user remove`
+
+Remove a user from the current ticket.
+
+**Options:**
+- `user` (required) - User or role to remove
+
+**Example:**
+```
+/tickets user remove user:@Moderator
+```
+
+**Permission Required:** `ticket:remuser`
+
+```typescript
+// From: src/class/tickets/tickets.ts:470
+await channel.permissionOverwrites.delete(member.id)
+```
+
+## Transcripts
+
+The `Transcripter` class generates HTML transcripts:
+
+```typescript
+// From: src/class/tickets/tickets.ts:15
+class Transcripter {
+    constructor(prisma: PrismaClient, client: ExtendedClient)
+    async generateTranscript(channel: BaseGuildTextChannel): Promise<string>
+}
+```
+
+**Transcript features:**
+- Full message history with timestamps
+- User avatars and names
+- Embedded content rendering
+- Attachment links
+- Discord formatting preservation
+- HTML format for easy viewing
+
+## Permissions
+
+The ticket system integrates with BotTroner's permission system:
+
+- `ticket:view` - View all tickets (automatically added to ticket channels)
+- `ticket:adduser` - Add users to tickets
+- `ticket:remuser` - Remove users from tickets
+
+## Automatic Features
+
+<Accordion title="Auto-Setup on Bot Start">
+The bot automatically recreates ticket setup messages on startup:
+
+```typescript
+// From: src/class/tickets/tickets.ts:21
+this.client.prisma.guilds.findMany({
+    where: { TicketChannel: { not: null } }
+}).then(guilds => {
+    for (const guild of guilds) {
+        this.setup(guild.id).catch(e => this.logs.error(e));
+    }
+})
+```
+</Accordion>
+
+<Accordion title="Duplicate Prevention">
+Users can only have one open ticket per category:
+
+```typescript
+// From: src/class/tickets/tickets.ts:147
+if (nTickets >= 1) {
+    throw new TicketsErrors("ticketArleadyOpen");
+}
+```
+</Accordion>
+
+<Accordion title="Topic ID Tracking">
+Ticket IDs are stored in channel topics for easy lookup:
+
+```typescript
+// From: src/class/tickets/tickets.ts:213
+channel.setTopic(`ticket id: ${res.id}`);
+```
+</Accordion>
+
+## Error Handling
+
+Custom error class for ticket operations:
+
+```typescript
+// From: src/class/tickets/tickets.ts:496
+export class TicketsErrors extends Error {
+    msg: TranslationKey;
+    constructor(message: TranslationKey) {
+        super(message);
+        this.msg = message;
+        this.name = "TicketsErrors";
+    }
+}
+```
+
+**Common error codes:**
+- `ticketCategoryError` - Invalid category
+- `ticketArleadyOpen` - User already has open ticket
+- `ticketChannelError` - Failed to create channel
+- `TicketNotChannel` - Command used outside ticket channel
+- `ticketSaveError` - Database save failed
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Organize Categories" icon="list">
+    Create separate categories for different support types (technical, billing, general)
+  </Card>
+  <Card title="Set Transcript Channel" icon="folder">
+    Always configure a transcript channel to maintain support history
+  </Card>
+  <Card title="Use Roles" icon="users">
+    Assign `ticket:view` permission to support staff roles
+  </Card>
+  <Card title="Regular Cleanup" icon="broom">
+    Periodically review and close inactive tickets
+  </Card>
+</CardGroup>
+
+## Internationalization
+
+The ticket system is fully internationalized:
+
+```typescript
+// From: src/class/tickets/tickets.ts:31
+const guildLang = await getGuildLang(guildId, this.client);
+const tDescMsg = await _U(guildLang, "ticketNew");
+```
+
+All messages are translated based on server language settings.

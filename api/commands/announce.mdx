@@ -1,0 +1,70 @@
+---
+title: 'Announce Command'
+description: 'Send announcements to designated channels'
+---
+
+# Announce Command
+
+The `/announce` command allows you to create and send announcements to specified channels using an interactive modal interface.
+
+## Command
+
+### announce
+
+Send an announcement to a designated channel.
+
+<ParamField path="channel" type="channel" required>
+  Channel where the announcement will be sent. Accepts:
+  - Text channels
+  - Announcement channels
+</ParamField>
+
+**Example:**
+```
+/announce channel:#announcements
+```
+
+## How It Works
+
+When you execute the command, a modal will appear with the following fields:
+
+### Title
+- **Required:** Yes
+- **Max Length:** 100 characters
+- **Description:** The title of your announcement
+
+### Message
+- **Required:** Yes
+- **Min Length:** 10 characters
+- **Max Length:** 2000 characters
+- **Description:** The main content of your announcement
+
+## Usage Flow
+
+1. Execute the command with your desired channel:
+   ```
+   /announce channel:#announcements
+   ```
+
+2. A modal will appear requesting:
+   - **Title:** Enter a compelling title for your announcement
+   - **Message:** Enter the full message content
+
+3. Submit the modal to send the announcement
+
+4. The announcement will be posted in the specified channel
+
+## Example
+
+**Command:**
+```
+/announce channel:#server-news
+```
+
+**Modal Input:**
+- Title: "Server Maintenance Scheduled"
+- Message: "We will be performing scheduled maintenance on Saturday from 2 AM to 4 AM UTC. The server may be unavailable during this time. Thank you for your understanding."
+
+## Source Code
+
+View the implementation: `~/workspace/source/src/commands/admin/announce.ts`

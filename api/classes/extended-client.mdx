@@ -1,0 +1,193 @@
+---
+title: 'ExtendedClient'
+description: 'Core Discord bot client class that extends Discord.js Client with additional functionality'
+icon: 'code'
+---
+
+## Overview
+
+`ExtendedClient` is the main bot client class that extends Discord.js's `Client` class. It provides centralized access to database connections, command loaders, event handlers, virtualization management, and the ticket system.
+
+**Source:** `src/class/extendClient.ts`
+
+## Constructor
+
+```typescript
+new ExtendedClient()
+```
+
+Initializes the Discord client with required gateway intents and sets up all core systems.
+
+### Gateway Intents
+
+The client is configured with the following intents:
+- `Guilds` - Guild information
+- `GuildMessages` - Message events in guilds
+- `MessageContent` - Access to message content
+- `GuildMembers` - Member information
+- `GuildVoiceStates` - Voice state updates
+- `GuildPresences` - User presence updates
+- `GuildInvites` - Invite tracking
+- `GuildIntegrations` - Integration updates
+- `GuildModeration` - Moderation events
+- `DirectMessages` - DM support
+
+## Properties
+
+<ParamField path="logger" type="Logger">
+  Pino logger instance scoped to the ExtendedClient module
+</ParamField>
+
+<ParamField path="prisma" type="PrismaClient" readonly>
+  Database client for accessing the Prisma ORM. Accessed via getter method.
+  
+  ```typescript
+  const user = await client.prisma.users.findUnique({ where: { id: userId } });
+  ```
+</ParamField>
+
+<ParamField path="ticket" type="Tickets" readonly>
+  Ticket system instance for managing support tickets. Accessed via getter method.
+  
+  ```typescript
+  await client.ticket.newTicket(interaction, client, categoryId, ticketInfo);
+  ```
+</ParamField>
+
+<ParamField path="commands" type="CommandsInfo" readonly>
+  Collection of loaded bot commands
+</ParamField>
+
+<ParamField path="components" type="ComponentsInfo" readonly>
+  All loaded interaction components (buttons, modals, select menus)
+</ParamField>
+
+<ParamField path="buttons" type="ButtonsCollection" readonly>
+  Collection of registered button handlers
+</ParamField>
+
+<ParamField path="modals" type="ModalsCollection" readonly>
+  Collection of registered modal handlers
+</ParamField>
+
+<ParamField path="selectMenus" type="SelectMenusCollection" readonly>
+  Collection of registered select menu handlers
+</ParamField>
+
+<ParamField path="virtualization" type="VirtualizationManager" readonly>
+  Virtualization manager for Proxmox and other virtualization providers
+  
+  ```typescript
+  const vms = await client.virtualization.listVMs(panelId);
+  ```
+</ParamField>
+
+<ParamField path="announcements" type="Map<string, Announcement>" readonly>
+  Map of pending announcements by ID
+</ParamField>
+
+## Methods
+
+### start()
+
+Starts the bot by logging in to Discord and initializing all systems.
+
+```typescript
+async start(): Promise<void>
+```
+
+**Workflow:**
+1. Logs in using the `botToken` environment variable
+2. Starts the virtualization monitor
+3. Calls `prepare()` to load commands, events, and components
+
+<ResponseField name="void" type="Promise<void>">
+  Resolves when the bot is fully started and ready
+</ResponseField>
+
+**Example:**
+```typescript
+const client = new ExtendedClient();
+await client.start();
+```
+
+### shutdown()
+
+Performs graceful shutdown of all bot systems.
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+**Shutdown sequence:**
+1. Stops virtualization monitor
+2. Disconnects from all virtualization panels
+3. Disconnects Prisma database connection
+4. Destroys Discord client connection
+5. Exits process after 100ms grace period
+
+<ResponseField name="void" type="Promise<void>">
+  Resolves when shutdown is complete. Process exits with code 0 on success or 1 on error.
+</ResponseField>
+
+**Example:**
+```typescript
+process.on('SIGINT', async () => {
+  await client.shutdown();
+});
+```
+
+### prepare()
+
+Loads and registers all commands, events, and components.
+
+```typescript
+async prepare(): Promise<void>
+```
+
+**Loading sequence:**
+1. Loads translation files
+2. Loads all command modules
+3. Registers slash commands with all guilds
+4. Loads event handlers
+5. Loads interaction components
+
+<ResponseField name="void" type="Promise<void>">
+  Resolves when all systems are loaded and registered
+</ResponseField>
+
+**Note:** This method is automatically called by `start()` and should not typically be called directly.
+
+## Usage Example
+
+```typescript
+import { ExtendedClient } from '@class/extendClient';
+
+const client = new ExtendedClient();
+
+// Start the bot
+await client.start();
+
+// Access database
+const guild = await client.prisma.guilds.findUnique({
+  where: { id: guildId }
+});
+
+// Use virtualization manager
+const stats = await client.virtualization.getStats(guildId);
+
+// Create a ticket
+await client.ticket.newTicket(interaction, client, categoryId, {
+  lang: 'en',
+  desc: 'Need help with server'
+});
+
+// Graceful shutdown on SIGINT
+process.on('SIGINT', () => client.shutdown());
+process.on('SIGTERM', () => client.shutdown());
+```
+
+## Related
+
+- [VirtualizationManager](/api/classes/virtualization-manager) - Manage virtualization panels
+- [TicketSystem](/api/classes/ticket-system) - Support ticket management

@@ -1,0 +1,521 @@
+---
+title: Ticket System Setup
+description: Configure and deploy the support ticket system with categories, transcripts, and permissions
+---
+
+BotTroner includes a comprehensive ticket support system that allows users to create support tickets, categorize them, and generate transcripts. The system includes role-based permissions, automatic transcript generation, and feedback collection.
+
+## Features
+
+- **Multi-category tickets** - Organize tickets by support type
+- **Automatic transcripts** - HTML transcripts saved on ticket close
+- **Permission system** - Control who can view and manage tickets
+- **User feedback** - Collect opinions when tickets close
+- **Multi-language** - Supports multiple languages
+
+## Prerequisites
+
+- BotTroner installed and running
+- Database configured with ticket tables
+- Discord server with appropriate channels
+- Administrator permissions in Discord
+
+## Setup Steps
+
+<Steps>
+
+### Create Ticket Categories
+
+First, create categories for organizing tickets. Each category should represent a support type:
+
+```
+/tickets category new
+  name: "Technical Support"
+  description: "Issues with bot functionality or technical problems"
+  categdiscid: [optional-category-channel-id]
+```
+
+**Parameters:**
+- `name` - Category name (max 30 characters)
+- `description` - Brief description (max 100 characters)
+- `categdiscid` - Discord category ID where tickets will be created (optional)
+
+<Tip>
+Create multiple categories for different support types: Technical Support, Billing, General Questions, Bug Reports, etc.
+</Tip>
+
+### Configure Ticket Channels
+
+Set up dedicated channels for ticket management:
+
+#### Transcript Channel
+
+Where ticket transcripts will be posted:
+
+```
+/tickets config transcript channel: #ticket-transcripts
+```
+
+#### Opinions Channel
+
+Where user feedback will be posted:
+
+```
+/tickets config opinions channel: #ticket-feedback
+```
+
+### Setup Ticket Panel
+
+Create the interactive ticket creation panel in a channel:
+
+```
+/tickets setup channel: #tickets
+```
+
+This creates an embed with a "Crear ticket" button that users can click to open tickets.
+
+The embed looks like:
+```
+╔══════════════════════╗
+║      Tickets         ║
+╠══════════════════════╣
+║ Click the button     ║
+║ below to create a    ║
+║ new support ticket   ║
+╚══════════════════════╝
+   [Crear ticket]
+```
+
+### Configure Permissions
+
+Grant ticket permissions to staff roles:
+
+```sql
+-- Grant ticket viewing permission
+INSERT INTO perfil_permisos (perfilId, permId)
+VALUES (
+  1,  -- Profile ID (staff role)
+  (SELECT id FROM permisos WHERE name = 'ticket:view')
+);
+
+-- Grant user management permission
+INSERT INTO perfil_permisos (perfilId, permId)
+VALUES (
+  1,
+  (SELECT id FROM permisos WHERE name = 'ticket:adduser')
+);
+```
+
+**Available permissions:**
+- `ticket:view` - View and respond to tickets
+- `ticket:adduser` - Add users to tickets
+- `ticket:remuser` - Remove users from tickets
+- `ticket:close` - Close tickets
+
+</Steps>
+
+## Using the Ticket System
+
+### Creating a Ticket
+
+Users can create tickets in two ways:
+
+#### 1. Using the Button (Recommended)
+
+Click the "Crear ticket" button in the ticket channel:
+
+1. Click the button
+2. Select a category from autocomplete
+3. Choose language for support
+4. Provide a description
+5. Submit
+
+The bot creates a private channel with:
+- Only the user and staff can see it
+- Ticket ID in channel topic
+- Initial ticket information embed
+- Close button
+
+#### 2. Using the Command
+
+```
+/tickets new
+  category: [select-category]
+  lang: "English"
+  descripcio: "I need help with..."
+```
+
+### Managing Tickets
+
+#### Add User to Ticket
+
+Add another user to the ticket channel:
+
+```
+/tickets user add user: @username
+```
+
+This grants them permission to view and participate.
+
+#### Remove User from Ticket
+
+Remove a user from the ticket:
+
+```
+/tickets user remove user: @username
+```
+
+#### Close Ticket
+
+Close the ticket (staff or ticket owner):
+
+```
+/tickets close
+```
+
+Or click the "Close" button in the channel.
+
+**What happens:**
+1. Transcript is generated
+2. Channel is deleted
+3. Transcript sent to user via DM
+4. Transcript posted in transcript channel
+5. Opinion modal shown to user (if they closed it)
+6. Ticket marked as closed in database
+
+### Ticket Transcripts
+
+Transcripts are automatically generated as HTML files containing:
+- All messages in the ticket
+- User avatars and names
+- Timestamps
+- Attachments (as links)
+- Message reactions
+- Formatted embeds
+
+Example transcript header:
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Ticket Transcript</title>
+  <style>/* Styles */</style>
+</head>
+<body>
+  <div class="message">
+    <img src="avatar.png" class="avatar">
+    <div class="content">
+      <span class="username">John</span>
+      <span class="timestamp">2026-03-13 10:30</span>
+      <div class="text">Help message...</div>
+    </div>
+  </div>
+  <!-- More messages -->
+</body>
+</html>
+```
+
+See implementation: `~/workspace/source/src/class/tickets/transcripter.ts`
+
+## Ticket Categories
+
+### List Categories
+
+View all categories:
+
+```sql
+SELECT * FROM tickets_categories WHERE guildId = 'YOUR_GUILD_ID';
+```
+
+### Update Category
+
+Modify an existing category:
+
+```
+/tickets category set
+  categid: [category-id]
+  name: "New Name"
+  description: "New description"
+  categdiscid: [new-category-channel]
+```
+
+You can update any combination of fields.
+
+### Delete Category
+
+Delete via database:
+
+```sql
+DELETE FROM tickets_categories WHERE id = [category-id];
+```
+
+<Warning>
+**Warning:** Deleting a category will prevent opening new tickets of that type, but won't affect existing tickets.
+</Warning>
+
+## Feedback System
+
+When users close their own tickets, they're prompted for feedback.
+
+### Feedback Flow
+
+1. User clicks "Close" button or uses `/tickets close`
+2. Modal appears asking for opinion
+3. User submits feedback
+4. Ticket closes with transcript
+5. Feedback posted to opinions channel
+
+If staff closes the ticket, no feedback is requested.
+
+See implementation: `~/workspace/source/src/class/tickets/tickets.ts:266`
+
+## Technical Implementation
+
+### Ticket Creation Flow
+
+```typescript
+// From tickets.ts:133
+async newTicket(interaction, client, categ, ticketInfo): Promise<string> {
+  // 1. Check if user already has open ticket in this category
+  const nTickets = await tickets.count({
+    where: { usrId: interaction.user.id, category: categ, closed: false }
+  });
+  
+  if (nTickets >= 1) {
+    throw new TicketsErrors("ticketArleadyOpen");
+  }
+  
+  // 2. Create channel with permissions
+  const perms = [
+    { id: everyone, deny: [ViewChannel] },
+    { id: user, allow: [ViewChannel, SendMessages] }
+  ];
+  
+  // Add staff roles with ticket:view permission
+  const ticketsRoles = await perfil_permisos.findMany({
+    where: { permisos: { name: "ticket:view" } }
+  });
+  
+  // 3. Create Discord channel
+  const channel = await guild.channels.create({
+    name: `${username}-${categoryName}`,
+    type: ChannelType.GuildText,
+    parent: categoryId,
+    permissionOverwrites: perms
+  });
+  
+  // 4. Save to database
+  await tickets.create({
+    data: { guildId, channelId, usrId, category }
+  });
+  
+  // 5. Send initial message with close button
+  channel.send({ embeds: [ticketEmbed], components: [closeButton] });
+}
+```
+
+### Ticket Closure Flow
+
+```typescript
+// From tickets.ts:310
+async close(interaction, client, Opinion = true) {
+  // 1. Get ticket from database
+  const ticket = await tickets.findFirst({
+    where: { OR: [{ id }, { channelId }] }
+  });
+  
+  // 2. Generate transcript
+  const transcript = await transcripter.generateTranscript(channel);
+  const transcriptAtt = new AttachmentBuilder(Buffer.from(transcript));
+  
+  // 3. Mark as closed
+  await tickets.update({
+    where: { id: ticket.id },
+    data: { closed: true }
+  });
+  
+  // 4. Delete channel
+  channel.delete();
+  
+  // 5. Send transcript to user
+  user.send({
+    embeds: [closeMsg],
+    files: [transcriptAtt],
+    components: !Opinion ? [OpinionButton] : undefined
+  });
+  
+  // 6. Post to transcript channel
+  transcriptChannel.send({
+    embeds: [closeMsg],
+    files: [transcriptAtt]
+  });
+}
+```
+
+### Permission Checking
+
+```typescript
+// Example from tickets.ts:416
+if (await HavePerms(client, guildId, user, "ticket:adduser")) {
+  // Allow action
+  await channel.permissionOverwrites.create(member.id, {
+    ViewChannel: true,
+    SendMessages: true,
+    ReadMessageHistory: true
+  });
+}
+```
+
+## Database Schema
+
+### Tickets Table
+
+```prisma
+model tickets {
+  id         Int      @id @default(autoincrement())
+  guildId    String   @db.VarChar(25)
+  channelId  String   @db.VarChar(25)
+  usrId      String   @db.VarChar(25)  // Ticket owner
+  category   Int                        // Foreign key to tickets_categories
+  transcript String?  @db.Text         // HTML transcript
+  closed     Boolean  @default(false)
+  CreatedAt  DateTime @default(now())
+  
+  tickets_categories tickets_categories @relation(fields: [category], references: [id])
+}
+```
+
+### Categories Table
+
+```prisma
+model tickets_categories {
+  id          Int       @id @default(autoincrement())
+  guildId     String    @db.VarChar(25)
+  name        String    @db.VarChar(30)
+  description String    @db.VarChar(100)
+  CategId     String?   @db.VarChar(25)  // Discord category channel ID
+  tickets     tickets[]
+}
+```
+
+### Guild Configuration
+
+```prisma
+model guilds {
+  id                String  @id
+  TicketChannel     String? // Channel with ticket creation button
+  TicketTranscripts String? // Channel for transcripts
+  TicketMsg         String? // Message ID of ticket button
+  TicketOpinions    String? // Channel for feedback
+  // ... other fields
+}
+```
+
+## Localization
+
+The ticket system supports multiple languages using the translation system:
+
+```typescript
+const guildLang = await getGuildLang(guildId, client);
+const msg = await _U(guildLang, "ticketNewMsg", {
+  user: username,
+  category: categoryName
+});
+```
+
+Translations are stored in the `traducciones` table.
+
+## Troubleshooting
+
+### Ticket Creation Fails
+
+**Problem:** "ticketChannelError"
+
+**Solutions:**
+1. Verify bot has `MANAGE_CHANNELS` permission
+2. Check category ID is valid
+3. Ensure bot role is high enough to create channels
+4. Verify Discord category isn't full (max 50 channels)
+
+### Permissions Not Working
+
+**Problem:** Staff can't see tickets
+
+**Solutions:**
+1. Check `perfil_permisos` table has correct role mappings
+2. Verify `ticket:view` permission exists in `permisos` table
+3. Ensure role is assigned to profile in `perfils` table
+4. Re-run ticket setup: `/tickets setup`
+
+### Transcript Not Sending
+
+**Problem:** Transcript doesn't arrive
+
+**Solutions:**
+1. Check user has DMs enabled
+2. Verify transcript channel exists
+3. Check bot has permission to send files in transcript channel
+4. Look for errors in bot logs
+
+### Duplicate Tickets
+
+**Problem:** User can create multiple tickets
+
+**Solutions:**
+This shouldn't happen - the code checks for existing open tickets:
+```typescript
+const nTickets = await tickets.count({
+  where: { usrId, category, closed: false }
+});
+if (nTickets >= 1) throw new Error("ticketArleadyOpen");
+```
+
+If it happens:
+1. Check database `closed` field is being set properly
+2. Verify ticket count query is working
+3. Manually close duplicate tickets in database
+
+## Best Practices
+
+<Tip>
+**Organization:**
+- Create categories for each support type
+- Use clear, descriptive category names
+- Set up dedicated Discord categories for each ticket type
+- Regularly review and archive old transcripts
+</Tip>
+
+<Tip>
+**Permissions:**
+- Only grant `ticket:view` to staff roles
+- Use `ticket:adduser` for senior staff who can escalate
+- Limit who can configure ticket settings
+- Audit permissions regularly
+</Tip>
+
+<Tip>
+**Response Time:**
+- Monitor transcript channel for new tickets
+- Set up Discord notifications for ticket channel
+- Use ticket categories to prioritize urgent issues
+- Close tickets promptly when resolved
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Commands Reference" icon="terminal" href="/guides/commands">
+    Complete list of ticket commands
+  </Card>
+  <Card title="Ticket System API" icon="shield" href="/api/classes/ticket-system">
+    Learn about the ticket system API
+  </Card>
+</CardGroup>
+
+## Code References
+
+- Tickets Class: `~/workspace/source/src/class/tickets/tickets.ts`
+- Transcripter: `~/workspace/source/src/class/tickets/transcripter.ts`
+- Ticket Command: `~/workspace/source/src/commands/tickets/ticket.ts`
+- Ticket Handlers: `~/workspace/source/src/handlers/tickets/`
+- Database Schema: `~/workspace/source/prisma/schema.prisma:128-154`

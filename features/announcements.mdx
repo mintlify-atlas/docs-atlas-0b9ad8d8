@@ -1,0 +1,464 @@
+---
+title: Announcements
+description: Create rich, formatted announcements with preview and confirmation workflow
+icon: bullhorn
+---
+
+The Announcements feature allows server administrators to create professional, formatted announcements with a preview-and-confirm workflow to ensure accuracy before posting.
+
+## Overview
+
+BotTroner's announcement system uses Discord modals for content input, supports rich formatting with embeds and images, and provides a preview before sending to prevent mistakes.
+
+<CardGroup cols={2}>
+  <Card title="Rich Formatting" icon="wand-magic-sparkles">
+    Support for embeds, fields, and images
+  </Card>
+  <Card title="Preview System" icon="eye">
+    Review announcements before sending
+  </Card>
+  <Card title="Markdown Support" icon="hashtag">
+    Use # headers to create embed fields
+  </Card>
+  <Card title="Image Embeds" icon="image">
+    Embed images directly in announcements
+  </Card>
+</CardGroup>
+
+## Command
+
+### `/announce`
+
+Create and send an announcement to a specified channel.
+
+**Options:**
+- `channel` (required) - Text or announcement channel where the announcement will be sent
+
+**Example:**
+```
+/announce channel:#announcements
+```
+
+```typescript
+// From: src/commands/admin/announce.ts:8
+command.setName("announce")
+    .setDescription("comando que envia un anuncio al canal designado para anuncios")
+    .addChannelOption(option =>
+        option.setName("channel")
+            .setDescription("canal donde se enviara el anuncio")
+            .setRequired(true)
+            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement))
+```
+
+## Announcement Workflow
+
+### Step 1: Command Execution
+
+When you run `/announce`, a modal appears:
+
+```typescript
+// From: src/commands/admin/announce.ts:20
+const modal = new ModalBuilder()
+    .setCustomId(`announce-modal_${channel.id}`)
+    .setTitle('Crear Anuncio');
+
+const titleInput = new TextInputBuilder()
+    .setCustomId('title')
+    .setLabel("Título del anuncio")
+    .setMaxLength(100)
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true);
+
+const messageInput = new TextInputBuilder()
+    .setCustomId('message')
+    .setLabel("Mensaje del anuncio")
+    .setMinLength(10)
+    .setMaxLength(2000)
+    .setStyle(TextInputStyle.Paragraph)
+    .setRequired(true);
+```
+
+**Modal fields:**
+- **Title** (max 100 characters) - Short text input
+- **Message** (10-2000 characters) - Paragraph text input
+
+### Step 2: Modal Submission & Preview
+
+After submitting the modal, the system:
+
+1. **Generates unique hash** for the announcement:
+```typescript
+// From: src/components/announce-modals/announce-modal.ts:22
+const hash = randomBytes(8).toString("hex");
+
+client.announcements.set(hash, {
+    channelId,
+    title,
+    message,
+    userId: interaction.user.id
+});
+```
+
+2. **Parses formatting** (see Formatting section below)
+
+3. **Shows preview** with confirmation buttons:
+```typescript
+// From: src/components/announce-modals/announce-modal.ts:106
+const confirmButton = new ButtonBuilder()
+    .setCustomId(`announce-confirm_${hash}`)
+    .setLabel("✅ Confirmar y Enviar")
+    .setStyle(ButtonStyle.Success);
+
+const cancelButton = new ButtonBuilder()
+    .setCustomId(`announce-cancel_${hash}`)
+    .setLabel("❌ Cancelar")
+    .setStyle(ButtonStyle.Danger);
+```
+
+### Step 3: Confirmation
+
+- **Confirm**: Sends the announcement to the target channel
+- **Cancel**: Deletes the preview and cancels the announcement
+
+<Note>
+Announcements automatically expire after 5 minutes if not confirmed.
+</Note>
+
+## Formatting System
+
+### Basic Announcement
+
+Simple title and message:
+
+```
+Title: Weekly Update
+Message: We have exciting news to share this week!
+```
+
+Results in:
+- Embed title: "Weekly Update"
+- Embed description: "We have exciting news to share this week!"
+
+### Using Headers for Fields
+
+Use `#` at the start of a line to create embed fields:
+
+```
+Title: Server Rules
+Message:
+Welcome to our server!
+
+# Rule 1: Be Respectful
+Treat all members with respect and kindness.
+
+# Rule 2: No Spam
+Avoid posting repetitive or unwanted content.
+
+# Rule 3: Follow Discord ToS
+All Discord Terms of Service apply.
+```
+
+**How it works:**
+```typescript
+// From: src/components/announce-modals/announce-modal.ts:49
+if (message.includes("#")) {
+    const lines = message.split("\n");
+    for (const line of lines) {
+        if (line.startsWith("#")) {
+            // Start new field
+            const title = line.slice(1).trim();
+            embedFields.push({
+                name: title,
+                value: tmpContent.trim(),
+                inline: false
+            });
+        } else if (startaddContent) {
+            // Add to current field content
+            tmpContent += line + "\n";
+        } else {
+            // Add to main description
+            newMessage += line + "\n";
+        }
+    }
+}
+```
+
+### Embedding Images
+
+Use `[image]` followed by a URL:
+
+```
+Title: New Feature Announcement
+Message:
+Check out our new feature!
+
+[image]https://example.com/feature.png
+
+# Key Features
+Here's what you need to know...
+```
+
+**Image parsing:**
+```typescript
+// From: src/components/announce-modals/announce-modal.ts:84
+if (message.includes("[image]")) {
+    const imageRegex = /\[image\](https?:\/\/[^\s]+\.(?:png|jpg|jpeg|gif|webp))/i;
+    const match = message.match(imageRegex);
+    if (match && match[1]) {
+        const imageUrl = match[1];
+        newMessage = newMessage.replace(match[0], "").trim();
+        previewEmbed.setImage(imageUrl);
+        client.announcements.get(hash)!.imatge = imageUrl;
+    }
+}
+```
+
+**Supported formats:**
+- PNG (.png)
+- JPEG (.jpg, .jpeg)
+- GIF (.gif)
+- WebP (.webp)
+
+<Tip>
+Images must be publicly accessible URLs starting with http:// or https://
+</Tip>
+
+## Embed Styling
+
+All announcements use a consistent embed style:
+
+```typescript
+// From: src/components/announce-modals/announce-modal.ts:38
+const previewEmbed = new EmbedBuilder()
+    .setTitle(title)
+    .setColor(0x5865F2)  // Discord Blurple
+    .setFooter({ text: `Anuncio de ${interaction.user.tag}` })
+    .setTimestamp();
+```
+
+**Embed properties:**
+- **Color**: Discord Blurple (0x5865F2)
+- **Footer**: Shows announcement author
+- **Timestamp**: Current time
+- **Title**: From modal input
+- **Description**: Main message content (excluding headers)
+- **Fields**: Generated from # headers
+- **Image**: From [image] tag
+
+## Data Storage
+
+Announcements are temporarily stored in memory:
+
+```typescript
+// From: src/components/announce-modals/announce-modal.ts:25
+client.announcements.set(hash, {
+    channelId,
+    title,
+    message,
+    userId: interaction.user.id
+});
+
+// Auto-cleanup after 5 minutes
+setTimeout(() => {
+    client.announcements.delete(hash);
+}, 5 * 60 * 1000);
+```
+
+**Storage structure:**
+```typescript
+interface AnnouncementData {
+    channelId: string;
+    title: string;
+    message: string;
+    userId: string;
+    fields?: APIEmbedField[];
+    imatge?: string;
+}
+```
+
+## Button Handlers
+
+### Confirm Button
+
+```typescript
+// Component: src/components/announce-buttons/announce-confirm.ts
+export const run = async ({ interaction, client, optionalParams }) => {
+    const hash = optionalParams?.["hash"] as string;
+    const announcement = client.announcements.get(hash);
+    
+    // Build final embed
+    const embed = new EmbedBuilder()
+        .setTitle(announcement.title)
+        .setDescription(announcement.message)
+        .setColor(0x5865F2)
+        .setTimestamp();
+    
+    if (announcement.fields) {
+        embed.addFields(announcement.fields);
+    }
+    
+    if (announcement.imatge) {
+        embed.setImage(announcement.imatge);
+    }
+    
+    // Send to target channel
+    const channel = await client.channels.fetch(announcement.channelId);
+    await channel.send({ embeds: [embed] });
+    
+    // Cleanup
+    client.announcements.delete(hash);
+};
+```
+
+### Cancel Button
+
+```typescript
+// Component: src/components/announce-buttons/announce-cancel.ts
+export const run = async ({ interaction, client, optionalParams }) => {
+    const hash = optionalParams?.["hash"] as string;
+    
+    // Remove from storage
+    client.announcements.delete(hash);
+    
+    // Update message
+    await interaction.update({
+        content: "❌ Anuncio cancelado.",
+        embeds: [],
+        components: []
+    });
+};
+```
+
+## Examples
+
+### Example 1: Simple Announcement
+
+**Input:**
+```
+Title: Server Maintenance
+Message: The server will undergo maintenance tonight from 2-4 AM EST. Please save your work.
+```
+
+**Output:**
+- Clean embed with title and description
+- Footer showing author
+- Timestamp
+
+### Example 2: Multi-Section Announcement
+
+**Input:**
+```
+Title: Monthly Newsletter
+Message:
+Here's what happened this month!
+
+# Community Events
+We hosted 5 amazing events with over 200 participants.
+
+# New Features
+- Improved moderation tools
+- New reaction roles
+- Enhanced logging
+
+# Staff Highlights
+Congratulations to @Moderator for being MVP this month!
+```
+
+**Output:**
+- Main description: "Here's what happened this month!"
+- Three fields: Community Events, New Features, Staff Highlights
+- Each field with its respective content
+
+### Example 3: Announcement with Image
+
+**Input:**
+```
+Title: New Logo Reveal
+Message:
+We're excited to reveal our new server logo!
+
+[image]https://example.com/logo.png
+
+# What Changed
+We modernized the design while keeping the core identity.
+```
+
+**Output:**
+- Description: "We're excited to reveal our new server logo!"
+- Embedded image
+- Field: "What Changed" with explanation
+
+## Permissions
+
+The `/announce` command typically requires:
+- Administrator permission
+- Or custom permission role assigned via BotTroner's permission system
+
+<Warning>
+Only trusted users should have access to the announce command as it can send messages to any channel.
+</Warning>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use Preview" icon="magnifying-glass">
+    Always review the preview before confirming to catch formatting errors
+  </Card>
+  <Card title="Structure Content" icon="list-check">
+    Use headers to organize long announcements into readable sections
+  </Card>
+  <Card title="Test Images" icon="link">
+    Verify image URLs are public and accessible before using them
+  </Card>
+  <Card title="Keep Concise" icon="compress">
+    Announcements should be clear and to the point for better engagement
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<Accordion title="Image Not Displaying">
+**Issue:** Image tag used but image doesn't appear
+
+**Solutions:**
+- Ensure URL is publicly accessible (not behind authentication)
+- Check that URL ends with a supported extension (.png, .jpg, etc.)
+- Verify the URL uses http:// or https://
+- Test the URL in a browser first
+</Accordion>
+
+<Accordion title="Fields Not Parsing">
+**Issue:** # headers not creating separate fields
+
+**Solutions:**
+- Ensure # is at the very start of the line (no spaces before)
+- Add at least one line of content after each header
+- Check that content follows on the next line after #
+</Accordion>
+
+<Accordion title="Preview Expired">
+**Issue:** Buttons don't work after some time
+
+**Solutions:**
+- Announcements expire after 5 minutes for security
+- Create a new announcement with `/announce`
+- Confirm promptly after reviewing the preview
+</Accordion>
+
+## Limitations
+
+- **Title**: Maximum 100 characters
+- **Message**: 10-2000 characters
+- **Preview timeout**: 5 minutes
+- **Image formats**: PNG, JPG, JPEG, GIF, WebP only
+- **Embed fields**: Subject to Discord's 25 field limit
+- **Total embed size**: Must not exceed 6000 characters
+
+## Future Enhancements
+
+The announcement system is designed for future expansion:
+- Scheduled announcements
+- Template system
+- Multi-channel broadcast
+- Mention controls
+- Rich formatting controls (bold, italic, etc.)

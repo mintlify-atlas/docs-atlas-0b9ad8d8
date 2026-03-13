@@ -1,0 +1,657 @@
+---
+title: Commands Reference
+description: Complete reference of all available BotTroner slash commands
+---
+
+BotTroner uses Discord's slash commands for all interactions. This page documents all available commands, their options, and usage examples.
+
+## Command Categories
+
+Commands are organized into the following categories:
+
+- **Basic** - General bot commands
+- **Tickets** - Support ticket system
+- **Virtualization** - VM management
+- **Admin** - Administrative commands
+
+## Basic Commands
+
+### /ping
+
+Check bot latency and connection status.
+
+```
+/ping
+```
+
+**Response:**
+```
+Pong! : 45ms. Latencia: 120ms
+```
+
+- **Client Ping**: WebSocket heartbeat latency
+- **Latencia**: Time to process and respond to command
+
+**Code:** `~/workspace/source/src/commands/basic/ping.ts`
+
+### /sync
+
+Synchronize slash commands with Discord (admin only).
+
+```
+/sync
+```
+
+Use this after:
+- Adding new commands
+- Modifying command structure
+- Changing command permissions
+
+**Note:** Commands may take up to 1 hour to sync globally, or instantly for guild-specific registration.
+
+**Code:** `~/workspace/source/src/commands/basic/sync.ts`
+
+## Ticket Commands
+
+Manage the support ticket system. See [Ticket System Setup](/guides/setup-ticket-system) for configuration.
+
+### /tickets new
+
+Create a new support ticket.
+
+```
+/tickets new
+  category: [select-category]
+  lang: "English"
+  descripcio: "Description of your issue"
+```
+
+**Parameters:**
+- `category` (required) - Ticket category (autocomplete)
+- `lang` (required) - Preferred language for support
+- `descripcio` (required) - Issue description
+
+**Behavior:**
+- Creates private channel with user + staff
+- Channel name: `username-categoryname`
+- Prevents duplicate open tickets in same category
+- Adds close button to channel
+
+### /tickets close
+
+Close the current ticket.
+
+```
+/tickets close
+```
+
+**Must be used in a ticket channel.**
+
+**Actions:**
+1. Generates HTML transcript
+2. Marks ticket as closed in database
+3. Deletes channel
+4. Sends transcript to user via DM
+5. Posts transcript to configured channel
+6. Requests feedback (if closed by user)
+
+### /tickets setup
+
+Create ticket creation panel in a channel.
+
+```
+/tickets setup channel: #tickets
+```
+
+**Parameters:**
+- `channel` (optional) - Channel to place the panel (defaults to current)
+
+**Creates:**
+- Embed with ticket information
+- "Crear ticket" button
+- Stores message ID for future updates
+
+### /tickets config transcript
+
+Set channel for ticket transcripts.
+
+```
+/tickets config transcript channel: #ticket-transcripts
+```
+
+**Parameters:**
+- `channel` (required) - Channel for transcripts
+
+### /tickets config opinions
+
+Set channel for user feedback.
+
+```
+/tickets config opinions channel: #ticket-feedback
+```
+
+**Parameters:**
+- `channel` (required) - Channel for opinions/feedback
+
+### /tickets category new
+
+Create a new ticket category.
+
+```
+/tickets category new
+  name: "Technical Support"
+  description: "Technical issues and bugs"
+  categdiscid: [optional-discord-category-id]
+```
+
+**Parameters:**
+- `name` (required) - Category name (max 30 chars)
+- `description` (required) - Category description (max 100 chars)
+- `categdiscid` (optional) - Discord category ID for tickets (autocomplete)
+
+### /tickets category set
+
+Update an existing ticket category.
+
+```
+/tickets category set
+  categid: [category-id]
+  name: "New Name"
+  description: "New description"
+  categdiscid: [new-category-id]
+```
+
+**Parameters:**
+- `categid` (required) - Category ID to update (autocomplete)
+- `name` (optional) - New category name
+- `description` (optional) - New description
+- `categdiscid` (optional) - New Discord category ID
+
+### /tickets user add
+
+Add a user to the current ticket.
+
+```
+/tickets user add user: @username
+```
+
+**Parameters:**
+- `user` (required) - User to add
+
+**Permission:** `ticket:adduser`
+
+**Must be used in a ticket channel.**
+
+### /tickets user remove
+
+Remove a user from the current ticket.
+
+```
+/tickets user remove user: @username
+```
+
+**Parameters:**
+- `user` (required) - User to remove
+
+**Permission:** `ticket:remuser`
+
+**Must be used in a ticket channel.**
+
+**Code:** `~/workspace/source/src/commands/tickets/ticket.ts`
+
+## Virtualization Commands
+
+Manage virtual machines and hypervisor panels. See [VM Panel Setup](/guides/setup-vm-panel) for configuration.
+
+### /vm list
+
+List all virtual machines.
+
+```
+/vm list panel: [optional-panel-id]
+```
+
+**Parameters:**
+- `panel` (optional) - Specific panel ID (autocomplete), defaults to default panel
+
+**Shows:**
+- VM ID and name
+- Current status (running/stopped/paused)
+- Node location
+- VM type (KVM/LXC)
+- Resource usage
+
+### /vm status
+
+Get detailed status of a specific VM.
+
+```
+/vm status
+  panel: [panel-id]
+  vm-id: [vm-id]
+```
+
+**Parameters:**
+- `panel` (required) - Panel ID (autocomplete)
+- `vm-id` (required) - Virtual machine ID (autocomplete)
+
+**Shows:**
+- Current state (running/stopped/paused/suspended)
+- Uptime
+- CPU usage (%)
+- Memory usage (MB)
+- Network traffic (RX/TX bytes)
+- Node location
+
+### /vm action
+
+Execute an action on a VM.
+
+```
+/vm action
+  panel: [panel-id]
+  vm-id: [vm-id]
+  action: [start/stop/restart/pause/resume/reset]
+```
+
+**Parameters:**
+- `panel` (required) - Panel ID (autocomplete)
+- `vm-id` (required) - Virtual machine ID (autocomplete)
+- `action` (required) - Action to perform
+
+**Available Actions:**
+- `start` - Power on the VM
+- `stop` - Graceful shutdown
+- `restart` - Reboot the VM
+- `pause` - Pause/suspend VM execution
+- `resume` - Resume from paused state
+- `reset` - Hard reset (force reboot)
+
+**Permissions:**
+Requires appropriate VM permission (e.g., `start`, `stop`, etc.)
+
+**Logging:**
+All actions are logged to `vm_action_logs` table with:
+- User ID
+- VM ID
+- Action type
+- Success/failure status
+- Timestamp
+- Error details (if failed)
+
+### /vm monitor start
+
+Create an interactive VM monitor panel.
+
+```
+/vm monitor start
+  panel: [panel-id]
+  vm-id: [vm-id]
+  user: @username
+```
+
+**Parameters:**
+- `panel` (required) - Panel ID (autocomplete)
+- `vm-id` (required) - Virtual machine ID (autocomplete)
+- `user` (required) - User who will receive the monitor
+
+**Creates:**
+- Embed with real-time VM status
+- Interactive buttons (Start, Stop, Restart, etc.)
+- Auto-updates every 30 seconds
+- Action history
+
+**Stored in:**
+`vm_monitors` table for persistence across bot restarts
+
+### /vm monitor stop
+
+Remove a VM monitor panel.
+
+```
+/vm monitor stop
+  panel: [panel-id]
+  vm-id: [vm-id]
+```
+
+**Parameters:**
+- `panel` (required) - Panel ID (autocomplete)
+- `vm-id` (required) - Virtual machine ID (autocomplete)
+
+### /vm panel list
+
+List all configured virtualization panels.
+
+```
+/vm panel list
+```
+
+**Shows:**
+- Panel ID
+- Panel name
+- Provider type (proxmox, vmware, etc.)
+- API URL
+- Active status
+- Default flag
+
+### /vm panel info
+
+Get detailed information about a panel.
+
+```
+/vm panel info panel: [panel-id]
+```
+
+**Parameters:**
+- `panel` (required) - Panel ID (autocomplete)
+
+**Shows:**
+- Provider version
+- Connected nodes
+- CPU and memory resources
+- Available features
+- Uptime
+- Node status
+
+### /vm panel new
+
+Register a new virtualization panel.
+
+```
+/vm panel new
+  name: "Production Proxmox"
+  url: "192.168.1.100:8006"
+  api-key: "root@pam!token=secret"
+  provider: "proxmox"
+```
+
+**Parameters:**
+- `name` (required) - Friendly name for the panel
+- `url` (required) - Panel URL without `https://`
+- `api-key` (required) - API token or credentials
+- `provider` (required) - Provider type (autocomplete: proxmox, vmware, etc.)
+
+**Process:**
+1. Validates credentials
+2. Tests connection
+3. Encrypts credentials
+4. Saves to database
+5. Sets as default (if first panel)
+
+**Proxmox Token Format:**
+```
+USER@REALM!TOKENID=SECRET
+```
+
+Example:
+```
+root@pam!bottroner=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+```
+
+### /vm panel delete
+
+Remove a virtualization panel.
+
+```
+/vm panel delete panel: [panel-id]
+```
+
+**Parameters:**
+- `panel` (required) - Panel ID to delete (autocomplete)
+
+**Warning:** This also deletes all associated monitors and logs!
+
+**Code:** `~/workspace/source/src/commands/virtualization/vm.ts`
+
+## Admin Commands
+
+Administrative commands for bot management.
+
+### /announce
+
+Create an announcement with a modal.
+
+```
+/announce channel: #announcements
+```
+
+**Parameters:**
+- `channel` (required) - Channel for the announcement
+
+**Opens a modal with:**
+- Title field (max 100 chars)
+- Message field (10-2000 chars)
+
+**Code:** `~/workspace/source/src/commands/admin/announce.ts`
+
+### /lock
+
+Lock/unlock channels or categories.
+
+```
+/lock [options]
+```
+
+**Use cases:**
+- Emergency lockdown
+- Scheduled maintenance
+- Event management
+
+**Code:** `~/workspace/source/src/commands/admin/lock.ts`
+
+### /guilds
+
+Manage guild-specific settings and information.
+
+```
+/guilds [subcommand]
+```
+
+**Use for:**
+- Viewing guild configuration
+- Managing multi-guild deployments
+- Debugging guild-specific issues
+
+**Code:** `~/workspace/source/src/commands/admin/guilds.ts`
+
+## Command Structure
+
+All commands use the `CommandBuilder` class:
+
+```typescript
+import { CommandBuilder } from "@class/builders/CommandBuilder";
+
+const command = new CommandBuilder();
+
+command
+  .setName("example")
+  .setDescription("Example command")
+  .addStringOption(option =>
+    option
+      .setName("param")
+      .setDescription("Parameter description")
+      .setRequired(true)
+  );
+
+command.runner = async ({ client, interaction }) => {
+  // Command logic
+};
+
+command.autocomplete = async ({ client, interaction }) => {
+  // Autocomplete logic
+};
+
+export default command;
+```
+
+## Autocomplete
+
+Many commands support autocomplete for easier parameter selection:
+
+**VM Commands:**
+- Panel IDs - Shows all available panels
+- VM IDs - Shows VMs from selected panel
+- Provider types - Shows supported providers
+
+**Ticket Commands:**
+- Category IDs - Shows all categories
+- Discord categories - Shows server categories
+
+**Implementation:**
+Autocomplete queries are handled in command files using the `autocomplete` handler:
+
+```typescript
+command.autocomplete = async ({ client, interaction }) => {
+  const focusedOption = interaction.options.getFocused(true);
+  
+  if (focusedOption.name === 'panel') {
+    const panels = await getPanels(interaction.guildId);
+    await interaction.respond(
+      panels.map(p => ({ name: p.name, value: p.id }))
+    );
+  }
+};
+```
+
+## Command Permissions
+
+BotTroner uses a role-based permission system:
+
+### Database Structure
+
+```prisma
+model permisos {
+  id          Int    @id @default(autoincrement())
+  name        String // e.g., "ticket:view", "vm:execute"
+  Descripcion String?
+}
+
+model perfils {
+  id      Int    @id @default(autoincrement())
+  name    String
+  guildId String
+  roleId  String  // Discord role ID
+}
+
+model perfil_permisos {
+  perfilId Int
+  permId   Int
+  // Links roles to permissions
+}
+```
+
+### Checking Permissions
+
+```typescript
+import { HavePerms } from "@src/utils/perms";
+
+if (await HavePerms(client, guildId, user, "ticket:view")) {
+  // User has permission
+} else {
+  // Permission denied
+}
+```
+
+## Error Handling
+
+Commands return user-friendly error messages:
+
+**Common Errors:**
+- `ticketArleadyOpen` - User already has open ticket
+- `TicketNotChannel` - Command used outside ticket channel
+- `VM_NOT_FOUND` - VM doesn't exist
+- `AUTHENTICATION_FAILED` - Invalid credentials or permissions
+- `CONNECTION_FAILED` - Can't reach panel
+
+## Rate Limiting
+
+Discord enforces rate limits on slash commands:
+- **Global:** 50 commands per second
+- **Per Guild:** 200 commands per 10 seconds
+- **Per User:** 5 commands per 5 seconds
+
+The bot handles rate limits automatically with exponential backoff.
+
+## Command Aliases
+
+Currently, slash commands don't support aliases. Each command has a unique name.
+
+For legacy prefix commands, use:
+```typescript
+command.setAliases(["alias1", "alias2"]);
+```
+
+## Localization
+
+Commands support multiple languages through the translation system:
+
+```typescript
+import { _U, getGuildLang } from "@src/utils/translate";
+
+const lang = await getGuildLang(guildId, client);
+const msg = await _U(lang, "translationKey", { param: value });
+```
+
+Translations stored in `traducciones` table with keys like:
+- `ticketNewMsg`
+- `pingMsg`
+- `vmActionSuccess`
+
+## Best Practices
+
+<Tip>
+**Command Design:**
+- Use clear, descriptive names
+- Keep parameter names consistent
+- Provide helpful descriptions
+- Use autocomplete for complex IDs
+- Validate all user input
+</Tip>
+
+<Tip>
+**Error Messages:**
+- Be specific about what went wrong
+- Suggest solutions when possible
+- Use ephemeral messages for errors
+- Log errors for debugging
+</Tip>
+
+<Tip>
+**Permissions:**
+- Check permissions before expensive operations
+- Provide clear permission denied messages
+- Document required permissions
+- Use role-based access control
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Database Setup" icon="database" href="/guides/setup-database">
+    Configure the database for persistent storage
+  </Card>
+  <Card title="VM Panel Setup" icon="server" href="/guides/setup-vm-panel">
+    Set up virtualization management
+  </Card>
+  <Card title="Ticket System" icon="ticket" href="/guides/setup-ticket-system">
+    Deploy the support ticket system
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/classes/extended-client">
+    Explore the code architecture
+  </Card>
+</CardGroup>
+
+## Code References
+
+**Command Files:**
+- Basic: `~/workspace/source/src/commands/basic/`
+- Tickets: `~/workspace/source/src/commands/tickets/ticket.ts`
+- VM: `~/workspace/source/src/commands/virtualization/vm.ts`
+- Admin: `~/workspace/source/src/commands/admin/`
+
+**Handlers:**
+- Tickets: `~/workspace/source/src/handlers/tickets/`
+- VM: `~/workspace/source/src/handlers/virtualization.ts`
+
+**Builders:**
+- CommandBuilder: `~/workspace/source/src/class/builders/CommandBuilder.ts`

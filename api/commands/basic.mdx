@@ -1,0 +1,64 @@
+---
+title: 'Basic Commands'
+description: 'Essential utility commands for bot management'
+---
+
+# Basic Commands
+
+Basic utility commands for checking bot status and synchronizing commands.
+
+## Commands
+
+### ping
+
+Check the bot's latency and response time.
+
+**Example:**
+```
+/ping
+```
+
+**Response:**
+The bot will reply with an ephemeral message showing:
+- **Client Ping:** WebSocket ping to Discord (in milliseconds)
+- **Latency:** Command round-trip time (in milliseconds)
+
+The response is only visible to you (ephemeral) and displays localized text based on your server's language settings.
+
+**Sample Output:**
+```
+Pong! : 45ms. Latencia: 120ms
+```
+
+### sync
+
+Synchronize bot commands with your available commands for the current server.
+
+**Example:**
+```
+/sync
+```
+
+**What It Does:**
+- Refreshes the guild's command cache
+- Re-registers all commands for the current server
+- Ensures all commands are up-to-date
+
+**Response:**
+The bot will reply with an ephemeral message:
+```
+commands Synced!
+```
+
+<Note>
+  The sync command is useful when:
+  - New commands have been added to the bot
+  - Commands aren't appearing in your server
+  - Command options have been updated
+</Note>
+
+## Source Code
+
+View the implementations:
+- Ping: `~/workspace/source/src/commands/basic/ping.ts`
+- Sync: `~/workspace/source/src/commands/basic/sync.ts`

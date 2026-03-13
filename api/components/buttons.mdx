@@ -1,0 +1,321 @@
+---
+title: Buttons
+description: Button components available in BotTroner for interactive Discord messages
+---
+
+## Overview
+
+Buttons in BotTroner provide interactive controls for users. Each button has a unique custom ID that triggers specific handler logic when clicked.
+
+## Button Categories
+
+<Tabs>
+  <Tab title="Virtualization Buttons">
+    ### VM Start Button
+    
+    Starts a virtual machine.
+    
+    **Custom ID:** `vm-start_{vmId}`
+    
+    **Location:** `src/components/virtualization-buttons/vm-start.ts:6`
+    
+    **Optional Parameters:**
+    - `id` (string): The VM identifier
+    
+    **Example Usage:**
+    ```typescript
+    const startBtn = new ButtonBuilder()
+      .setCustomId(`vm-start_${vm.id}`)
+      .setLabel("Iniciar")
+      .setEmoji("🟢")
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(vm.status === "running");
+    ```
+    
+    **Interaction Flow:**
+    1. User clicks the start button
+    2. Handler defers the update
+    3. Finds the panel for the VM
+    4. Executes the start action via `vmManager.executeVMAction()`
+    5. Sends feedback to the user
+    
+    ---
+    
+    ### VM Stop Button
+    
+    Stops a running virtual machine.
+    
+    **Custom ID:** `vm-stop_{vmId}`
+    
+    **Location:** `src/components/virtualization-buttons/vm-stop.ts:6`
+    
+    **Optional Parameters:**
+    - `id` (string): The VM identifier
+    
+    **Example Usage:**
+    ```typescript
+    const stopBtn = new ButtonBuilder()
+      .setCustomId(`vm-stop_${vm.id}`)
+      .setLabel("Apagar")
+      .setEmoji("🔴")
+      .setStyle(ButtonStyle.Danger)
+      .setDisabled(vm.status === "stopped");
+    ```
+    
+    **Interaction Flow:**
+    1. User clicks the stop button
+    2. Handler defers the update
+    3. Finds the panel for the VM
+    4. Executes the stop action via `vmManager.executeVMAction()`
+    5. Sends feedback to the user
+    
+    ---
+    
+    ### VM Restart Button
+    
+    Restarts a virtual machine.
+    
+    **Custom ID:** `vm-restart_{vmId}`
+    
+    **Location:** `src/components/virtualization-buttons/vm-restart.ts:6`
+    
+    **Optional Parameters:**
+    - `id` (string): The VM identifier
+    
+    **Example Usage:**
+    ```typescript
+    const restartBtn = new ButtonBuilder()
+      .setCustomId(`vm-restart_${vm.id}`)
+      .setLabel("Reiniciar")
+      .setEmoji("🔄")
+      .setStyle(ButtonStyle.Primary)
+      .setDisabled(vm.status === "stopped");
+    ```
+    
+    **Interaction Flow:**
+    1. User clicks the restart button
+    2. Handler defers the update
+    3. Finds the panel for the VM
+    4. Executes the restart action via `vmManager.executeVMAction()`
+    5. Sends feedback to the user
+    
+    ---
+    
+    ### VM Monitor Stop Button
+    
+    Stops monitoring a virtual machine and closes the control panel.
+    
+    **Custom ID:** `vm-monitor-stop_{vmId}`
+    
+    **Location:** `src/components/virtualization-buttons/vm-monitor-stop.ts:5`
+    
+    **Optional Parameters:**
+    - `id` (string): The VM identifier
+    
+    **Example Usage:**
+    ```typescript
+    const stopMonitorBtn = new ButtonBuilder()
+      .setCustomId(`vm-monitor-stop_${vm.id}`)
+      .setLabel("Cerrar Panel")
+      .setStyle(ButtonStyle.Secondary);
+    ```
+    
+    **Interaction Flow:**
+    1. User clicks the close panel button
+    2. Handler defers the update
+    3. Stops the monitor for the VM
+    4. Deletes the interaction reply message
+  </Tab>
+  
+  <Tab title="Ticket Buttons">
+    ### New Ticket Button
+    
+    Opens a select menu to create a new support ticket.
+    
+    **Custom ID:** `ticket-new`
+    
+    **Location:** `src/components/tickets-buttons/new.ts:6`
+    
+    **Example Usage:**
+    ```typescript
+    const newticket = new ButtonBuilder()
+      .setCustomId('ticket-new')
+      .setLabel('Crear ticket')
+      .setStyle(ButtonStyle.Primary);
+    ```
+    
+    **Interaction Flow:**
+    1. User clicks the new ticket button
+    2. Handler fetches ticket categories from the database
+    3. Creates a select menu with available categories
+    4. Replies with the select menu (ephemeral)
+    
+    ---
+    
+    ### Show Opinion Button
+    
+    Opens a modal to collect user feedback about ticket resolution.
+    
+    **Custom ID:** `ticket-show-opinion_{guildId}`
+    
+    **Location:** `src/components/tickets-buttons/show-opinion.ts:5`
+    
+    **Optional Parameters:**
+    - `guildId` (string): The guild identifier
+    
+    **Example Usage:**
+    ```typescript
+    const OpinionBtn = new ButtonBuilder()
+      .setCustomId(`ticket-show-opinion_${interaction.guildId}`)
+      .setLabel(tBtnOpinar)
+      .setStyle(ButtonStyle.Primary);
+    ```
+    
+    **Interaction Flow:**
+    1. User clicks the opinion button
+    2. Handler creates a modal with an opinion text input
+    3. Shows the modal to the user
+    4. Modal submission is handled by the `ticket-suggest-modal` handler
+    
+    ---
+    
+    ### Delete Ticket Button
+    
+    Closes a ticket without collecting feedback.
+    
+    **Custom ID:** `ticket-borrar`
+    
+    **Location:** `src/components/tickets-buttons/borrar.ts:6`
+    
+    **Example Usage:**
+    ```typescript
+    const b_borrar = new ButtonBuilder()
+      .setCustomId('ticket-borrar')
+      .setLabel(tBtnClose)
+      .setStyle(ButtonStyle.Danger);
+    ```
+    
+    **Interaction Flow:**
+    1. User clicks the delete button
+    2. Handler calls `client.ticket.closeWaitOpinion()`
+    3. Closes the ticket channel
+    4. Handles errors if the ticket cannot be closed
+  </Tab>
+  
+  <Tab title="Announcement Buttons">
+    ### Announce Confirm Button
+    
+    Confirms and sends an announcement to the designated channel.
+    
+    **Custom ID:** `announce-confirm_{hash}`
+    
+    **Location:** `src/components/announce-buttons/announce-confirm.ts:5`
+    
+    **Optional Parameters:**
+    - `hash` (string): Unique identifier for the announcement data
+    
+    **Example Usage:**
+    ```typescript
+    const confirmButton = new ButtonBuilder()
+      .setCustomId(`announce-confirm_${hash}`)
+      .setLabel("✅ Confirmar y Enviar")
+      .setStyle(ButtonStyle.Success);
+    ```
+    
+    **Interaction Flow:**
+    1. User clicks the confirm button
+    2. Handler retrieves announcement data from `client.announcements` map
+    3. Verifies the user is the announcement creator
+    4. Fetches the target channel
+    5. Creates and sends the announcement embed
+    6. Cleans up the stored data
+    7. Updates the interaction with success message
+    
+    ---
+    
+    ### Announce Cancel Button
+    
+    Cancels an announcement without sending it.
+    
+    **Custom ID:** `announce-cancel_{hash}`
+    
+    **Location:** `src/components/announce-buttons/announce-cancel.ts:4`
+    
+    **Optional Parameters:**
+    - `hash` (string): Unique identifier for the announcement data
+    
+    **Example Usage:**
+    ```typescript
+    const cancelButton = new ButtonBuilder()
+      .setCustomId(`announce-cancel_${hash}`)
+      .setLabel("❌ Cancelar")
+      .setStyle(ButtonStyle.Danger);
+    ```
+    
+    **Interaction Flow:**
+    1. User clicks the cancel button
+    2. Handler checks if announcement data exists
+    3. Verifies the user is the announcement creator
+    4. Removes the data from `client.announcements` map
+    5. Updates the interaction with cancellation message
+  </Tab>
+</Tabs>
+
+## Creating Custom Buttons
+
+To create a new button component:
+
+1. Create a new file in the appropriate category folder (e.g., `src/components/my-category-buttons/`)
+2. Export the required properties:
+
+```typescript
+import type { Buttons } from "@src/types/components";
+import type { ButtonInteraction } from "discord.js";
+
+export const data: Buttons["data"] = {
+    name: "my-button"
+}
+
+export const optionalParams: Buttons["optionalParams"] = {
+    id: "string" // Optional: define parameters
+}
+
+export const type: Buttons["type"] = "button";
+
+export const run: Buttons["run"] = async ({ interaction, client, optionalParams }) => {
+    // Your button logic here
+    await (interaction as ButtonInteraction).deferUpdate();
+    
+    // Process the interaction
+    const id = optionalParams?.["id"] as string;
+    
+    // Respond to user
+    await interaction.followUp({
+        content: "Button clicked!",
+        flags: MessageFlags.Ephemeral
+    });
+}
+```
+
+3. The button will be automatically loaded by the component handler
+
+## Button Naming Convention
+
+Button custom IDs follow this pattern:
+```
+{category}-{action}_{optionalParams}
+```
+
+Examples:
+- `vm-start_12345` - VM start button with VM ID 12345
+- `ticket-new` - New ticket button (no parameters)
+- `announce-confirm_a1b2c3d4` - Announce confirm with hash parameter
+
+## Best Practices
+
+1. **Always defer updates** for buttons that perform async operations
+2. **Use ephemeral messages** for error feedback
+3. **Validate permissions** before executing sensitive actions
+4. **Handle errors gracefully** with user-friendly messages
+5. **Use type assertions** when narrowing interaction types
+6. **Clean up resources** (e.g., delete temporary data after use)

@@ -1,0 +1,444 @@
+---
+title: 'Ticket System'
+description: 'Support ticket management system with categories, transcripts, and user permissions'
+icon: 'ticket'
+---
+
+## Overview
+
+The `Tickets` class provides a complete support ticket system for Discord guilds. It handles ticket creation, category management, user permissions, ticket closure with transcripts, and opinion collection.
+
+**Source:** `src/class/tickets/tickets.ts`
+
+## Constructor
+
+```typescript
+new Tickets(client: ExtendedClient)
+```
+
+<ParamField path="client" type="ExtendedClient" required>
+  The extended Discord client instance
+</ParamField>
+
+The constructor automatically sets up ticket systems for all guilds with configured ticket channels.
+
+## Setup & Configuration
+
+### setup()
+
+Sets up or updates the ticket creation message in a guild's ticket channel.
+
+```typescript
+async setup(guildId: string): Promise<void>
+```
+
+<ParamField path="guildId" type="string" required>
+  Discord guild ID
+</ParamField>
+
+**Functionality:**
+- Creates an embed message with a "Create Ticket" button
+- Updates existing ticket message if found
+- Stores message ID in database for future updates
+- Uses guild's configured language for localization
+
+**Example:**
+```typescript
+// Set up ticket system after configuring channel
+await client.ticket.setup(guildId);
+```
+
+## Category Management
+
+### newTicketCateg()
+
+Creates a new ticket category.
+
+```typescript
+async newTicketCateg(
+  guildId: string,
+  name: string,
+  description: string,
+  categoryId?: string
+): Promise<boolean>
+```
+
+<ParamField path="guildId" type="string" required>
+  Discord guild ID
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Category name (e.g., "Technical Support", "Billing")
+</ParamField>
+
+<ParamField path="description" type="string" required>
+  Category description shown to users
+</ParamField>
+
+<ParamField path="categoryId" type="string">
+  Discord category channel ID where ticket channels will be created
+</ParamField>
+
+<ResponseField name="success" type="boolean">
+  Returns `true` if category was created, `false` on error
+</ResponseField>
+
+**Example:**
+```typescript
+const success = await client.ticket.newTicketCateg(
+  guildId,
+  'Technical Support',
+  'Issues with services or configurations',
+  categoryChannelId
+);
+```
+
+### updateTicketCateg()
+
+Updates an existing ticket category.
+
+```typescript
+async updateTicketCateg(
+  categId: number,
+  name?: string,
+  description?: string,
+  categoryId?: string
+): Promise<boolean>
+```
+
+<ParamField path="categId" type="number" required>
+  Database ID of the category to update
+</ParamField>
+
+<ParamField path="name" type="string">
+  New category name
+</ParamField>
+
+<ParamField path="description" type="string">
+  New category description
+</ParamField>
+
+<ParamField path="categoryId" type="string">
+  New Discord category channel ID
+</ParamField>
+
+<ResponseField name="success" type="boolean">
+  Returns `true` if updated successfully
+</ResponseField>
+
+## Ticket Creation
+
+### newTicket()
+
+Creates a new support ticket for a user.
+
+```typescript
+async newTicket(
+  interaction: CommandInteraction | ModalSubmitInteraction,
+  client: ExtendedClient,
+  categ: number,
+  ticketInfo: { lang: string; desc: string }
+): Promise<string>
+```
+
+<ParamField path="interaction" type="CommandInteraction | ModalSubmitInteraction" required>
+  Discord interaction that triggered ticket creation
+</ParamField>
+
+<ParamField path="client" type="ExtendedClient" required>
+  Bot client instance
+</ParamField>
+
+<ParamField path="categ" type="number" required>
+  Category ID for the ticket
+</ParamField>
+
+<ParamField path="ticketInfo" type="object" required>
+  Ticket information object
+  
+  ```typescript
+  {
+    lang: string;  // User's preferred language
+    desc: string;  // Issue description
+  }
+  ```
+</ParamField>
+
+<ResponseField name="message" type="string">
+  Success message to display to the user (localized)
+</ResponseField>
+
+**Functionality:**
+- Checks for existing open tickets (max 1 per category per user)
+- Creates a private channel with appropriate permissions
+- Grants access to user and staff roles with `ticket:view` permission
+- Posts initial ticket message with user info and description
+- Includes a "Close Ticket" button
+
+**Throws:**
+- `TicketsErrors('ticketCategoryError')` - Invalid category
+- `TicketsErrors('ticketArleadyOpen')` - User already has an open ticket in this category
+- `TicketsErrors('ticketChannelError')` - Failed to create channel
+- `TicketsErrors('ticketSaveError')` - Database error
+
+**Example:**
+```typescript
+try {
+  const message = await client.ticket.newTicket(
+    interaction,
+    client,
+    categoryId,
+    {
+      lang: 'English',
+      desc: 'Cannot access my VM'
+    }
+  );
+  
+  await interaction.reply({ content: message, ephemeral: true });
+} catch (error) {
+  if (error instanceof TicketsErrors) {
+    const errorMsg = await _U(guildLang, error.msg);
+    await interaction.reply({ content: errorMsg, ephemeral: true });
+  }
+}
+```
+
+## Ticket Closure
+
+### closeWaitOpinion()
+
+Closes a ticket and prompts the ticket owner for feedback.
+
+```typescript
+async closeWaitOpinion(
+  interaction: CommandInteraction | ButtonInteraction,
+  client: ExtendedClient
+): Promise<void>
+```
+
+<ParamField path="interaction" type="CommandInteraction | ButtonInteraction" required>
+  Interaction in the ticket channel
+</ParamField>
+
+<ParamField path="client" type="ExtendedClient" required>
+  Bot client instance
+</ParamField>
+
+**Functionality:**
+- If the closer is the ticket owner, shows a feedback modal
+- Otherwise, closes immediately without requesting feedback
+- Delegates to `close()` method for actual closure
+
+**Throws:**
+- `TicketsErrors('TicketNotChannel')` - Not executed in a valid ticket channel
+
+### close()
+
+Closes a ticket, generates transcript, and sends to user.
+
+```typescript
+async close(
+  interaction: CommandInteraction | ModalSubmitInteraction | ButtonInteraction,
+  client: ExtendedClient,
+  Opinion?: boolean
+): Promise<void>
+```
+
+<ParamField path="interaction" type="CommandInteraction | ModalSubmitInteraction | ButtonInteraction" required>
+  Interaction triggering the closure
+</ParamField>
+
+<ParamField path="client" type="ExtendedClient" required>
+  Bot client instance
+</ParamField>
+
+<ParamField path="Opinion" type="boolean" default="true">
+  Whether to show the feedback button to the user
+</ParamField>
+
+**Functionality:**
+1. Generates HTML transcript of the entire conversation
+2. Marks ticket as closed in database
+3. Deletes the ticket channel
+4. DMs transcript to ticket owner
+5. Posts transcript to configured transcripts channel (if set)
+6. Includes feedback button if `Opinion` is `true`
+
+**Throws:**
+- `TicketsErrors('TicketNotChannel')` - Not in a valid ticket channel
+
+**Example:**
+```typescript
+// Close with opinion request
+await client.ticket.close(interaction, client, true);
+
+// Close without opinion request (staff closure)
+await client.ticket.close(interaction, client, false);
+```
+
+## User Management
+
+### addUser()
+
+Adds a user to an existing ticket channel.
+
+```typescript
+async addUser(
+  interaction: CommandInteraction,
+  client: ExtendedClient,
+  member: GuildMember
+): Promise<void>
+```
+
+<ParamField path="interaction" type="CommandInteraction" required>
+  Command interaction
+</ParamField>
+
+<ParamField path="client" type="ExtendedClient" required>
+  Bot client instance
+</ParamField>
+
+<ParamField path="member" type="GuildMember" required>
+  Guild member to add to the ticket
+</ParamField>
+
+**Requirements:**
+- Must be executed in a valid ticket channel
+- Executor must have `ticket:adduser` permission
+
+**Permissions granted to added user:**
+- View Channel
+- Send Messages
+- Read Message History
+- Add Reactions
+- Attach Files
+
+**Example:**
+```typescript
+const member = interaction.options.getMember('user');
+await client.ticket.addUser(interaction, client, member);
+```
+
+### removeUser()
+
+Removes a user from a ticket channel.
+
+```typescript
+async removeUser(
+  interaction: CommandInteraction,
+  client: ExtendedClient,
+  member: GuildMember
+): Promise<void>
+```
+
+<ParamField path="interaction" type="CommandInteraction" required>
+  Command interaction
+</ParamField>
+
+<ParamField path="client" type="ExtendedClient" required>
+  Bot client instance
+</ParamField>
+
+<ParamField path="member" type="GuildMember" required>
+  Guild member to remove from the ticket
+</ParamField>
+
+**Requirements:**
+- Must be executed in a valid ticket channel
+- Executor must have `ticket:remuser` permission
+
+## Error Handling
+
+### TicketsErrors
+
+Custom error class for ticket-related errors.
+
+```typescript
+class TicketsErrors extends Error {
+  msg: TranslationKey;
+  constructor(message: TranslationKey);
+}
+```
+
+**Error types:**
+- `ticketCategoryError` - Invalid or missing category
+- `ticketArleadyOpen` - User has an open ticket in this category
+- `ticketChannelError` - Failed to create channel
+- `ticketSaveError` - Database error
+- `TicketNotChannel` - Command not executed in a ticket channel
+
+**Usage:**
+```typescript
+try {
+  await client.ticket.newTicket(...);
+} catch (error) {
+  if (error instanceof TicketsErrors) {
+    const localizedError = await _U(guildLang, error.msg);
+    await interaction.reply({ content: localizedError, ephemeral: true });
+  }
+}
+```
+
+## Complete Example
+
+```typescript
+import { ExtendedClient } from '@class/extendClient';
+import { TicketsErrors } from '@class/tickets/tickets';
+
+const client = new ExtendedClient();
+
+// 1. Create ticket category
+const categoryCreated = await client.ticket.newTicketCateg(
+  guildId,
+  'Technical Support',
+  'Get help with technical issues',
+  discordCategoryId
+);
+
+// 2. Setup ticket message
+if (categoryCreated) {
+  await client.ticket.setup(guildId);
+}
+
+// 3. Handle ticket creation (from modal)
+try {
+  const successMsg = await client.ticket.newTicket(
+    interaction,
+    client,
+    categoryId,
+    {
+      lang: interaction.locale,
+      desc: modalFields.getTextInputValue('description')
+    }
+  );
+  
+  await interaction.reply({ content: successMsg, ephemeral: true });
+} catch (error) {
+  if (error instanceof TicketsErrors) {
+    const errorMsg = await _U(guildLang, error.msg);
+    await interaction.reply({ content: errorMsg, ephemeral: true });
+  }
+}
+
+// 4. Add staff member to ticket
+const staffMember = interaction.options.getMember('staff');
+await client.ticket.addUser(interaction, client, staffMember);
+
+// 5. Close ticket with opinion request
+await client.ticket.closeWaitOpinion(interaction, client);
+```
+
+## Database Schema
+
+The ticket system uses the following database tables:
+
+- `tickets` - Active and closed tickets
+- `tickets_categories` - Ticket categories per guild
+- `guilds` - Ticket channel and transcript channel configuration
+- `perfil_permisos` - Role-based permissions for ticket access
+
+## Related
+
+- [ExtendedClient](/api/classes/extended-client) - Access ticket system via `client.ticket`
+- [Ticket Setup Guide](/guides/setup-ticket-system) - Configure the ticket system
+- [Ticket Feature Overview](/features/tickets) - Learn about the ticket system

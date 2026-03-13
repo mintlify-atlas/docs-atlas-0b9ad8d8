@@ -1,0 +1,169 @@
+---
+title: 'Tickets Commands'
+description: 'Manage the complete ticket system for support and inquiries'
+---
+
+# Tickets Commands
+
+The `/tickets` command provides a comprehensive ticket system for managing user support requests, categories, and configurations.
+
+## Subcommands
+
+### new
+
+Create a new support ticket.
+
+<ParamField path="category" type="integer" required>
+  Category ID for the ticket reason (autocomplete enabled)
+</ParamField>
+
+<ParamField path="lang" type="string" required>
+  Language preference for support
+</ParamField>
+
+<ParamField path="descripcio" type="string" required>
+  Description of the issue or request
+</ParamField>
+
+**Example:**
+```
+/tickets new category:1 lang:"English" descripcio:"I need help with my account"
+```
+
+### close
+
+Close the current ticket.
+
+**Example:**
+```
+/tickets close
+```
+
+### setup
+
+Generate the ticket system message in a specified channel for easy ticket creation.
+
+<ParamField path="channel" type="channel" optional>
+  Channel where the ticket system message will be sent
+</ParamField>
+
+**Example:**
+```
+/tickets setup channel:#support
+```
+
+## Config Subcommand Group
+
+Configure various ticket system settings.
+
+### config transcript
+
+Configure the channel where ticket transcripts will be sent.
+
+<ParamField path="channel" type="channel" required>
+  Channel to send ticket transcripts
+</ParamField>
+
+**Example:**
+```
+/tickets config transcript channel:#ticket-logs
+```
+
+### config opinions
+
+Set the channel where user feedback/opinions will be sent when tickets are closed.
+
+<ParamField path="channel" type="channel" required>
+  Channel to send user opinions
+</ParamField>
+
+**Example:**
+```
+/tickets config opinions channel:#feedback
+```
+
+## Category Subcommand Group
+
+Manage ticket categories.
+
+### category new
+
+Create a new ticket category.
+
+<ParamField path="name" type="string" required>
+  Name of the category
+</ParamField>
+
+<ParamField path="description" type="string" required>
+  Description of the category
+</ParamField>
+
+<ParamField path="categdiscid" type="string" optional>
+  Discord category ID where tickets of this type will be placed (autocomplete enabled)
+</ParamField>
+
+**Example:**
+```
+/tickets category new name:"Technical Support" description:"For technical issues" categdiscid:123456789
+```
+
+### category set
+
+Modify an existing ticket category.
+
+<ParamField path="categid" type="integer" required>
+  ID of the category to modify (autocomplete enabled)
+</ParamField>
+
+<ParamField path="name" type="string" optional>
+  New name for the category
+</ParamField>
+
+<ParamField path="description" type="string" optional>
+  New description for the category
+</ParamField>
+
+<ParamField path="categdiscid" type="string" optional>
+  New Discord category ID (autocomplete enabled)
+</ParamField>
+
+**Example:**
+```
+/tickets category set categid:1 name:"Tech Support Updated"
+/tickets category set categid:1 description:"Updated description" categdiscid:987654321
+```
+
+## User Subcommand Group
+
+Manage users within tickets.
+
+### user add
+
+Add a user to the current ticket.
+
+<ParamField path="user" type="mentionable" required>
+  User to add to the ticket (can be a user or role)
+</ParamField>
+
+**Example:**
+```
+/tickets user add user:@username
+/tickets user add user:@Support Team
+```
+
+### user remove
+
+Remove a user from the current ticket.
+
+<ParamField path="user" type="mentionable" required>
+  User to remove from the ticket (can be a user or role)
+</ParamField>
+
+**Example:**
+```
+/tickets user remove user:@username
+```
+
+## Source Code
+
+View the implementation: `~/workspace/source/src/commands/tickets/ticket.ts`

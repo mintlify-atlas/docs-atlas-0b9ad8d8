@@ -1,0 +1,489 @@
+---
+title: 'VirtualizationManager'
+description: 'Manages multiple virtualization providers and panels for VM control and monitoring'
+icon: 'server'
+---
+
+## Overview
+
+`VirtualizationManager` is the central manager for virtualization operations. It handles multiple virtualization providers (currently Proxmox, with support for future providers like VMware, Hyper-V, OpenStack) and manages panel connections, VM operations, and permissions.
+
+**Source:** `src/class/virtualization/VirtualizationManager.ts`
+
+## Constructor
+
+```typescript
+new VirtualizationManager(prisma: PrismaClient)
+```
+
+<ParamField path="prisma" type="PrismaClient" required>
+  Database client for storing panel configurations and managing VM permissions
+</ParamField>
+
+## Properties
+
+<ParamField path="monitor" type="VirtualizationMonitor | null">
+  Monitoring service for tracking VM status changes and health checks. Set after initialization.
+  
+  ```typescript
+  manager.monitor = new VirtualizationMonitor(client, manager);
+  manager.monitor.start();
+  ```
+</ParamField>
+
+## Panel Management
+
+### getPanelsByGuild()
+
+Retrieves all virtualization panels configured for a guild.
+
+```typescript
+async getPanelsByGuild(guildId: string): Promise<ManagerResult<PanelDBConfig[]>>
+```
+
+<ParamField path="guildId" type="string" required>
+  Discord guild ID
+</ParamField>
+
+<ResponseField name="success" type="boolean">
+  Whether the operation succeeded
+</ResponseField>
+
+<ResponseField name="data" type="PanelDBConfig[]">
+  Array of panel configurations with decrypted credentials
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message if operation failed
+</ResponseField>
+
+<ResponseField name="errorCode" type="VirtualizationErrorCode">
+  Standardized error code for programmatic handling
+</ResponseField>
+
+**Example:**
+```typescript
+const result = await manager.getPanelsByGuild('123456789');
+if (result.success && result.data) {
+  for (const panel of result.data) {
+    console.log(`Panel: ${panel.name} (${panel.type})`);
+  }
+}
+```
+
+### addPanel()
+
+Adds a new virtualization panel to a guild after validating credentials.
+
+```typescript
+async addPanel(
+  guildId: string,
+  name: string,
+  type: string,
+  apiUrl: string,
+  credentials: PanelCredentials,
+  setAsDefault?: boolean
+): Promise<ManagerResult<PanelDBConfig>>
+```
+
+<ParamField path="guildId" type="string" required>
+  Discord guild ID
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Human-readable panel name
+</ParamField>
+
+<ParamField path="type" type="string" required>
+  Provider type (e.g., `'proxmox'`)
+</ParamField>
+
+<ParamField path="apiUrl" type="string" required>
+  API endpoint URL for the panel
+</ParamField>
+
+<ParamField path="credentials" type="PanelCredentials" required>
+  Authentication credentials (encrypted before storage)
+  
+  ```typescript
+  {
+    username: string;
+    tokenId?: string;
+    tokenSecret?: string;
+    password?: string;
+  }
+  ```
+</ParamField>
+
+<ParamField path="setAsDefault" type="boolean" default="false">
+  Whether to set this panel as the guild's default
+</ParamField>
+
+<ResponseField name="success" type="boolean">
+  Whether the panel was added successfully
+</ResponseField>
+
+<ResponseField name="data" type="PanelDBConfig">
+  The created panel configuration
+</ResponseField>
+
+**Example:**
+```typescript
+const result = await manager.addPanel(
+  '123456789',
+  'Production Proxmox',
+  'proxmox',
+  'https://proxmox.example.com:8006/api2/json',
+  {
+    username: 'admin@pam',
+    tokenId: 'api-token-id',
+    tokenSecret: 'secret-value'
+  },
+  true
+);
+
+if (result.success) {
+  console.log(`Panel added with ID: ${result.data?.id}`);
+}
+```
+
+### removePanel()
+
+Removes a panel and disconnects from it.
+
+```typescript
+async removePanel(panelId: number): Promise<ManagerResult<boolean>>
+```
+
+<ParamField path="panelId" type="number" required>
+  Database ID of the panel to remove
+</ParamField>
+
+### getPanel()
+
+Retrieves a specific panel by ID.
+
+```typescript
+async getPanel(panelId: number): Promise<ManagerResult<PanelDBConfig>>
+```
+
+<ParamField path="panelId" type="number" required>
+  Database ID of the panel
+</ParamField>
+
+### connectToPanel()
+
+Establishes or retrieves a cached connection to a panel.
+
+```typescript
+async connectToPanel(panelId: number): Promise<ManagerResult<IVirtualizationProvider>>
+```
+
+<ParamField path="panelId" type="number" required>
+  Database ID of the panel
+</ParamField>
+
+<ResponseField name="data" type="IVirtualizationProvider">
+  Connected provider instance
+</ResponseField>
+
+<ResponseField name="provider" type="string">
+  Provider type (e.g., 'proxmox')
+</ResponseField>
+
+## VM Operations
+
+### listVMs()
+
+Lists all virtual machines on a panel.
+
+```typescript
+async listVMs(panelId: number): Promise<ManagerResult<VMStatus[]>>
+```
+
+<ParamField path="panelId" type="number" required>
+  Database ID of the panel
+</ParamField>
+
+<ResponseField name="data" type="VMStatus[]">
+  Array of VM status objects containing id, name, status, resources, etc.
+</ResponseField>
+
+**Example:**
+```typescript
+const result = await manager.listVMs(panelId);
+if (result.success && result.data) {
+  const running = result.data.filter(vm => vm.status === 'running');
+  console.log(`${running.length} VMs running`);
+}
+```
+
+### getVM()
+
+Retrieves detailed information about a specific VM.
+
+```typescript
+async getVM(panelId: number, vmId: string): Promise<ManagerResult<VMStatus>>
+```
+
+<ParamField path="panelId" type="number" required>
+  Database ID of the panel
+</ParamField>
+
+<ParamField path="vmId" type="string" required>
+  Virtual machine identifier
+</ParamField>
+
+### executeVMAction()
+
+Executes an action on a VM with permission checking and audit logging.
+
+```typescript
+async executeVMAction(
+  panelId: number,
+  action: VMAction,
+  userId: string,
+  guildId?: string
+): Promise<ManagerResult<VMActionResult>>
+```
+
+<ParamField path="panelId" type="number" required>
+  Database ID of the panel
+</ParamField>
+
+<ParamField path="action" type="VMAction" required>
+  Action to execute
+  
+  ```typescript
+  {
+    vmId: string;
+    type: 'start' | 'stop' | 'restart' | 'shutdown' | 'reset';
+  }
+  ```
+</ParamField>
+
+<ParamField path="userId" type="string" required>
+  Discord user ID performing the action (for permission checks)
+</ParamField>
+
+<ParamField path="guildId" type="string">
+  Discord guild ID for context
+</ParamField>
+
+<ResponseField name="data" type="VMActionResult">
+  Result of the action execution
+</ResponseField>
+
+**Workflow:**
+1. Checks user permissions via `checkVMPermission()`
+2. Connects to the panel
+3. Executes the action through the provider
+4. Logs the action result to database
+5. Returns success or error response
+
+**Example:**
+```typescript
+const result = await manager.executeVMAction(
+  panelId,
+  { vmId: '100', type: 'start' },
+  interaction.user.id,
+  interaction.guildId
+);
+
+if (result.success) {
+  await interaction.reply('VM started successfully');
+} else {
+  await interaction.reply(`Error: ${result.error}`);
+}
+```
+
+## Permissions & Logging
+
+### checkVMPermission()
+
+Checks if a user has permission to perform an action on a VM.
+
+```typescript
+async checkVMPermission(
+  userId: string,
+  vmId: string,
+  action: string,
+  guildId?: string
+): Promise<boolean>
+```
+
+<ParamField path="userId" type="string" required>
+  Discord user ID
+</ParamField>
+
+<ParamField path="vmId" type="string" required>
+  Virtual machine ID
+</ParamField>
+
+<ParamField path="action" type="string" required>
+  Action type (e.g., 'start', 'stop', 'restart')
+</ParamField>
+
+<ParamField path="guildId" type="string">
+  Guild ID for context
+</ParamField>
+
+<ResponseField name="allowed" type="boolean">
+  Returns `true` if user has permission, `false` otherwise. Permissions support wildcards (`*`).
+</ResponseField>
+
+### logVMAction()
+
+Logs a VM action to the audit database.
+
+```typescript
+async logVMAction(data: {
+  vmId: string;
+  userId: string;
+  action: string;
+  status: 'success' | 'pending' | 'error';
+  error?: string;
+  details?: any;
+}): Promise<void>
+```
+
+## Statistics & Monitoring
+
+### getStats()
+
+Retrieves aggregated statistics for all panels in a guild.
+
+```typescript
+async getStats(guildId: string): Promise<ManagerResult<{
+  totalPanels: number;
+  activePanels: number;
+  totalVMs: number;
+  runningVMs: number;
+  stoppedVMs: number;
+}>>
+```
+
+<ParamField path="guildId" type="string" required>
+  Discord guild ID
+</ParamField>
+
+**Example:**
+```typescript
+const stats = await manager.getStats(guildId);
+if (stats.success && stats.data) {
+  console.log(`${stats.data.runningVMs}/${stats.data.totalVMs} VMs running`);
+}
+```
+
+### getSystemInfo()
+
+Retrieves system information from a panel.
+
+```typescript
+async getSystemInfo(panelId: number): Promise<ManagerResult<any>>
+```
+
+<ParamField path="panelId" type="number" required>
+  Panel ID to query
+</ParamField>
+
+## Utility Methods
+
+### getAvailableProviders()
+
+Returns a list of registered provider types.
+
+```typescript
+getAvailableProviders(): string[]
+```
+
+<ResponseField name="providers" type="string[]">
+  Array of provider type names (e.g., `['proxmox']`)
+</ResponseField>
+
+### validatePanelCredentials()
+
+Validates panel credentials by attempting a test connection.
+
+```typescript
+async validatePanelCredentials(
+  type: string,
+  apiUrl: string,
+  credentials: PanelCredentials
+): Promise<ManagerResult<boolean>>
+```
+
+### disconnectPanel()
+
+Disconnects from a specific panel and removes it from cache.
+
+```typescript
+async disconnectPanel(panelId: number): Promise<void>
+```
+
+### disconnectAll()
+
+Disconnects from all active panels.
+
+```typescript
+async disconnectAll(): Promise<void>
+```
+
+## Complete Example
+
+```typescript
+import { VirtualizationManager } from '@class/virtualization/VirtualizationManager';
+import { prisma } from '@class/prismaClient';
+
+const manager = new VirtualizationManager(prisma);
+
+// Add a new Proxmox panel
+const addResult = await manager.addPanel(
+  guildId,
+  'Main Proxmox Server',
+  'proxmox',
+  'https://pve.example.com:8006/api2/json',
+  {
+    username: 'admin@pam',
+    tokenId: 'automation',
+    tokenSecret: process.env.PROXMOX_TOKEN
+  },
+  true
+);
+
+if (!addResult.success) {
+  console.error('Failed to add panel:', addResult.error);
+  return;
+}
+
+const panelId = addResult.data!.id;
+
+// List all VMs
+const vmsResult = await manager.listVMs(panelId);
+if (vmsResult.success) {
+  console.log(`Found ${vmsResult.data?.length} VMs`);
+}
+
+// Execute action with permission check
+const actionResult = await manager.executeVMAction(
+  panelId,
+  { vmId: '100', type: 'start' },
+  userId,
+  guildId
+);
+
+if (actionResult.success) {
+  console.log('VM started successfully');
+} else if (actionResult.errorCode === 'AUTHENTICATION_FAILED') {
+  console.log('Permission denied');
+}
+
+// Get guild statistics
+const stats = await manager.getStats(guildId);
+console.log(`${stats.data?.runningVMs} of ${stats.data?.totalVMs} VMs running`);
+```
+
+## Related
+
+- [ExtendedClient](/api/classes/extended-client) - Access VirtualizationManager via `client.virtualization`
+- [Virtualization Feature](/features/virtualization) - Learn about VM management features

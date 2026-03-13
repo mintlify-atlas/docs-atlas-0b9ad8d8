@@ -1,0 +1,306 @@
+---
+title: Select Menus
+description: Select menu components for user choices in BotTroner
+---
+
+## Overview
+
+Select menus (also known as dropdowns) allow users to choose from a list of options. BotTroner uses select menus to provide structured navigation and choice selection.
+
+## Available Select Menus
+
+### Ticket Category Select Menu
+
+Allows users to select a ticket category when creating a new support ticket.
+
+**Custom ID:** `categ-ticket`
+
+**Location:** `src/components/tickets-selectmenu/categ.ts:5`
+
+**Purpose:** Present available ticket categories and open the appropriate ticket creation modal.
+
+**Example Creation:**
+```typescript
+const ticketType = new StringSelectMenuBuilder()
+  .setCustomId("categ-ticket")
+  .setPlaceholder("Elije el tipo de ticket")
+
+ const categories = await client.prisma.tickets_categories.findMany({
+    where: { guildId: interaction.guild!.id }
+});
+
+categories.forEach((categ) => {
+    const tmpoption = new StringSelectMenuOptionBuilder()
+        .setLabel(categ.name)
+        .setDescription(categ.description)
+        .setValue(categ.id.toString());
+    ticketType.addOptions(tmpoption);
+})
+
+await interaction.reply({
+    content: await _U(discLang, "ticketNewSelect"),
+    components: [
+        new ActionRowBuilder<StringSelectMenuBuilder>()
+            .addComponents(ticketType)
+    ],
+    flags: MessageFlags.Ephemeral
+})
+```
+
+**Interaction Flow:**
+1. User selects a category from the dropdown
+2. Handler retrieves the selected value (`interaction.values[0]`)
+3. Creates a modal with the ticket type as a parameter
+4. Shows the modal to collect ticket details
+
+**Handler Code:**
+```typescript
+export const run: selMenuType["run"] = async ({ interaction }) => {
+    const ticketType = interaction.values[0]
+    const modal = new ModalBuilder()
+        .setCustomId(`ticket-modal_${ticketType}`)
+        .setTitle('Sistema de tickets');
+
+    const langInput = new TextInputBuilder()
+        .setCustomId('lang')
+        .setLabel("idioma que hablas ?| lang to speak?")
+        .setMaxLength(10)
+        .setStyle(TextInputStyle.Short);
+
+    const descInput = new TextInputBuilder()
+        .setCustomId('description')
+        .setLabel("descripcion del motivo del ticket?")
+        .setMinLength(20)
+        .setStyle(TextInputStyle.Paragraph);
+
+    const firstActionRow = new ActionRowBuilder<TextInputBuilder>()
+        .addComponents(langInput);
+    const secondActionRow = new ActionRowBuilder<TextInputBuilder>()
+        .addComponents(descInput);
+
+    modal.addComponents(firstActionRow, secondActionRow);
+
+    await interaction.showModal(modal)
+}
+```
+
+**Triggered By:** `ticket-new` button (`src/components/tickets-buttons/new.ts:11`)
+
+**Opens:** `ticket-modal_{ticketType}` modal (`src/components/tickets-modals/ticket.ts`)
+
+## Creating Custom Select Menus
+
+To create a new select menu component:
+
+1. Create a new file in the appropriate category folder (e.g., `src/components/my-category-selectmenu/`)
+2. Export the required properties:
+
+```typescript
+import type { selMenuType } from "@dTypes/components";
+import { StringSelectMenuBuilder, StringSelectMenuOptionBuilder } from "discord.js";
+
+export const data: selMenuType["data"] = {
+    name: "my-selectmenu"
+}
+
+export const type: selMenuType["type"] = "selectmenu";
+
+export const run: selMenuType["run"] = async ({ interaction, client }) => {
+    // Get selected values
+    const selectedValue = interaction.values[0];
+    
+    // Process the selection
+    await interaction.reply({
+        content: `You selected: ${selectedValue}`,
+        ephemeral: true
+    });
+}
+```
+
+3. The select menu will be automatically loaded by the component handler
+
+## Creating Select Menu Options
+
+### Basic Options
+
+```typescript
+const option = new StringSelectMenuOptionBuilder()
+    .setLabel('Option Label')        // Display text
+    .setValue('option_value')         // Internal value
+    .setDescription('Description');   // Optional description
+```
+
+### Dynamic Options from Database
+
+```typescript
+const selectMenu = new StringSelectMenuBuilder()
+    .setCustomId('my-menu')
+    .setPlaceholder('Choose an option');
+
+const items = await client.prisma.myTable.findMany({
+    where: { guildId: interaction.guild!.id }
+});
+
+items.forEach((item) => {
+    const option = new StringSelectMenuOptionBuilder()
+        .setLabel(item.name)
+        .setDescription(item.description)
+        .setValue(item.id.toString());
+    selectMenu.addOptions(option);
+});
+```
+
+### Options with Emojis
+
+```typescript
+const option = new StringSelectMenuOptionBuilder()
+    .setLabel('Premium Option')
+    .setValue('premium')
+    .setEmoji('⭐');
+```
+
+### Default Selected Option
+
+```typescript
+const option = new StringSelectMenuOptionBuilder()
+    .setLabel('Default Option')
+    .setValue('default')
+    .setDefault(true);
+```
+
+## Handling Select Menu Interactions
+
+### Single Selection
+
+```typescript
+export const run: selMenuType["run"] = async ({ interaction, client }) => {
+    const selected = interaction.values[0];
+    
+    await interaction.reply({
+        content: `Selected: ${selected}`,
+        ephemeral: true
+    });
+}
+```
+
+### Multiple Selection
+
+Note: Set `minValues` and `maxValues` on the select menu builder:
+
+```typescript
+const selectMenu = new StringSelectMenuBuilder()
+    .setCustomId('multi-select')
+    .setMinValues(1)
+    .setMaxValues(3);
+
+// In handler
+const selectedValues = interaction.values; // Array of selected values
+```
+
+### Opening a Modal
+
+```typescript
+export const run: selMenuType["run"] = async ({ interaction }) => {
+    const selectedValue = interaction.values[0];
+    
+    const modal = new ModalBuilder()
+        .setCustomId(`my-modal_${selectedValue}`)
+        .setTitle('Input Form');
+    
+    // Add inputs...
+    
+    await interaction.showModal(modal);
+}
+```
+
+### Updating the Message
+
+```typescript
+export const run: selMenuType["run"] = async ({ interaction, client }) => {
+    const selected = interaction.values[0];
+    
+    await interaction.update({
+        content: `You selected: ${selected}`,
+        components: [] // Optionally remove the select menu
+    });
+}
+```
+
+## Select Menu Naming Convention
+
+Select menu custom IDs follow this pattern:
+```
+{category}-{purpose}
+```
+
+Examples:
+- `categ-ticket` - Ticket category selection
+- `role-select` - Role selection menu
+- `language-menu` - Language preference menu
+
+## Best Practices
+
+1. **Use clear labels** - Help users understand each option
+2. **Add descriptions** - Provide context for each choice
+3. **Set appropriate limits** - Use minValues/maxValues for multi-select
+4. **Handle all values** - Process all selected values in multi-select
+5. **Provide feedback** - Always respond to the interaction
+6. **Use placeholders** - Guide users with helpful placeholder text
+7. **Validate selections** - Ensure selected values are valid
+8. **Keep options concise** - Discord limits select menus to 25 options
+
+## Select Menu Limits
+
+- **Maximum options:** 25 per select menu
+- **Maximum select menus per message:** 5 (each in an ActionRow)
+- **Label max length:** 100 characters
+- **Description max length:** 100 characters
+- **Value max length:** 100 characters
+- **Placeholder max length:** 150 characters
+
+## Common Patterns
+
+### Pagination with Select Menus
+
+If you have more than 25 options, consider:
+1. Adding search/filter functionality
+2. Splitting into multiple select menus by category
+3. Using pagination with buttons + select menu
+
+### Combining with Buttons
+
+```typescript
+const selectRow = new ActionRowBuilder<StringSelectMenuBuilder>()
+    .addComponents(selectMenu);
+
+const buttonRow = new ActionRowBuilder<ButtonBuilder>()
+    .addComponents(confirmButton, cancelButton);
+
+await interaction.reply({
+    content: 'Make your selection:',
+    components: [selectRow, buttonRow],
+    ephemeral: true
+});
+```
+
+### Conditional Options
+
+```typescript
+const options: StringSelectMenuOptionBuilder[] = [];
+
+if (hasPermission) {
+    options.push(
+        new StringSelectMenuOptionBuilder()
+            .setLabel('Admin Option')
+            .setValue('admin')
+    );
+}
+
+options.push(
+    new StringSelectMenuOptionBuilder()
+        .setLabel('Regular Option')
+        .setValue('regular')
+);
+
+selectMenu.addOptions(options);
+```

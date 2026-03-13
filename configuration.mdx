@@ -1,0 +1,350 @@
+---
+title: Configuration
+description: Configure BotTroner with environment variables and settings
+---
+
+BotTroner uses environment variables for configuration. This guide covers all available configuration options.
+
+## Environment Variables
+
+All configuration is managed through a `.env` file in the project root. Copy `.env.example` to get started:
+
+```bash
+cp .env.example .env
+```
+
+### Required Variables
+
+These variables must be configured for BotTroner to function:
+
+<Steps>
+  <Step title="Discord Bot Token">
+    ```bash
+    DISCORD_TOKEN=your_discord_bot_token_here
+    ```
+    
+    Your Discord bot token from the [Discord Developer Portal](https://discord.com/developers/applications).
+    
+    <Warning>
+      Never commit your actual token to version control. Keep this value secret.
+    </Warning>
+    
+    **How to obtain:**
+    1. Navigate to the Discord Developer Portal
+    2. Select your application
+    3. Go to the "Bot" section
+    4. Click "Reset Token" or "Copy" to get your token
+  </Step>
+
+  <Step title="Database URL">
+    ```bash
+    DATABASE_URL="mysql://user:password@localhost:3306/bottroner"
+    ```
+    
+    The connection string for your MySQL/MariaDB database.
+    
+    **Format:**
+    ```
+    mysql://[user]:[password]@[host]:[port]/[database]
+    ```
+    
+    **Examples:**
+    
+    <CodeGroup>
+    ```bash Local MySQL
+    DATABASE_URL="mysql://root:password@localhost:3306/bottroner"
+    ```
+    
+    ```bash Remote MariaDB
+    DATABASE_URL="mysql://dbuser:securepass@db.example.com:3306/bottroner"
+    ```
+    
+    ```bash SQLite (Development)
+    DATABASE_URL="file:./dev.db"
+    ```
+    </CodeGroup>
+    
+    <Note>
+      The `.env.example` file includes SQLite as the default for quick local testing. For production, use MySQL or MariaDB.
+    </Note>
+  </Step>
+</Steps>
+
+### Optional Variables
+
+These variables have defaults but can be customized:
+
+#### Environment Mode
+
+```bash
+NODE_ENV=development
+```
+
+Sets the runtime environment. Affects logging verbosity and development features.
+
+**Options:**
+- `development` - Verbose logging, development features enabled
+- `production` - Optimized logging, production-ready
+- `test` - Test mode configuration
+
+<Info>
+  In production, set `NODE_ENV=production` for optimal performance.
+</Info>
+
+#### Logging Level
+
+```bash
+LOG_LEVEL=info
+```
+
+Controls the logging verbosity using [Pino](https://getpino.io) logger.
+
+**Available levels** (from least to most verbose):
+- `fatal` - Only fatal errors
+- `error` - Errors and fatal
+- `warn` - Warnings, errors, and fatal
+- `info` - Informational messages (recommended)
+- `debug` - Debug information
+- `trace` - Trace-level debugging
+
+<CodeGroup>
+```bash Production
+LOG_LEVEL=error
+```
+
+```bash Development
+LOG_LEVEL=debug
+```
+
+```bash Testing
+LOG_LEVEL=trace
+```
+</CodeGroup>
+
+## Database Configuration
+
+### Prisma Configuration
+
+BotTroner uses Prisma ORM with a custom configuration file at `prisma.config.ts`:
+
+```typescript
+import 'dotenv/config'
+import type { PrismaConfig } from "prisma";
+import { env } from "prisma/config";
+
+export default {
+  schema: "prisma/schema.prisma",
+  migrations: {
+    path: "prisma/migrations",
+  },
+  datasource: { 
+    url: env("DATABASE_URL") 
+  }
+} satisfies PrismaConfig;
+```
+
+### Schema Location
+
+The database schema is defined in `prisma/schema.prisma`. The generated Prisma Client outputs to `generated/prisma`.
+
+### Database Provider
+
+The schema uses MySQL as the provider:
+
+```prisma
+datasource db {
+  provider = "mysql"
+}
+```
+
+<Note>
+  BotTroner uses the `@prisma/adapter-mariadb` for optimized MariaDB/MySQL connections.
+</Note>
+
+### Regenerating Prisma Client
+
+After modifying the schema, regenerate the Prisma Client:
+
+```bash
+bunx prisma generate
+```
+
+### Updating Database Schema
+
+To push schema changes to your database:
+
+<CodeGroup>
+```bash Development (db push)
+bun run update:db
+# or
+bunx prisma db push
+```
+
+```bash Production (migrations)
+bunx prisma migrate deploy
+```
+</CodeGroup>
+
+<Warning>
+  `db push` is great for development but doesn't create migration history. For production, use proper migrations.
+</Warning>
+
+## TypeScript Configuration
+
+BotTroner uses strict TypeScript settings defined in `tsconfig.json`:
+
+### Path Aliases
+
+The following import aliases are configured:
+
+| Alias | Path | Usage |
+|-------|------|-------|
+| `@prismaClient/*` | `./generated/prisma/*` | Prisma client imports |
+| `@src/*` | `./src/*` | Source root |
+| `@dTypes/*` | `./src/types/*` | Type definitions |
+| `@class/*` | `./src/class/*` | Class definitions |
+| `@utils/*` | `./src/utils/*` | Utility functions |
+| `@events/*` | `./src/events/*` | Event handlers |
+| `@handlers/*` | `./src/handlers/*` | Command handlers |
+
+**Example usage:**
+```typescript
+import { ExtendedClient } from "@class/extendClient";
+import { PrismaClient } from "@prismaClient/client";
+import { logger } from "@utils/logger";
+```
+
+### Strict Mode
+
+All TypeScript strict mode options are enabled:
+
+```json
+{
+  "strict": true,
+  "noFallthroughCasesInSwitch": true,
+  "noUncheckedIndexedAccess": true,
+  "noImplicitOverride": true,
+  "noUnusedLocals": true,
+  "noUnusedParameters": true
+}
+```
+
+<Info>
+  These strict settings ensure type safety and catch potential bugs at compile time.
+</Info>
+
+## Runtime Configuration
+
+### TLS Configuration
+
+BotTroner disables TLS certificate validation for development (set in `src/index.ts`):
+
+```typescript
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+```
+
+<Warning>
+  This is only suitable for development. For production, remove this line and use valid TLS certificates.
+</Warning>
+
+### Graceful Shutdown
+
+The bot implements graceful shutdown handling to properly clean up resources:
+
+```typescript
+import { GracefulShutdown } from "./class/gracefulShutdown";
+GracefulShutdown.setup(client);
+```
+
+This ensures:
+- Database connections are closed properly
+- Discord client disconnects cleanly
+- Active operations complete before shutdown
+
+## Feature-Specific Configuration
+
+Certain features require additional database configuration:
+
+### Guild Configuration
+
+Per-guild settings are stored in the `guilds` table:
+
+- `lang` - Language preference (default: "es-es")
+- `TicketChannel` - Channel ID for ticket creation
+- `TicketTranscripts` - Channel ID for ticket transcripts
+- `TicketMsg` - Message ID for ticket panel
+- `TicketOpinions` - Channel ID for ticket feedback
+- `proxmoxLogs` - Channel ID for Proxmox logs
+- `image` - Custom guild image URL
+
+### Virtualization Panels
+
+VM management requires configuration in the `virtualization_panels` table:
+
+- `type` - Panel type (proxmox, vmware, hyper-v, etc.)
+- `apiUrl` - Base URL for the API
+- `credentials` - Encrypted credentials (JSON)
+- `config` - Type-specific configuration (JSON)
+
+<Note>
+  These are configured through Discord commands, not environment variables.
+</Note>
+
+## Configuration Best Practices
+
+<Steps>
+  <Step title="Use Strong Credentials">
+    Always use strong, unique passwords for:
+    - Database users
+    - Discord bot tokens
+    - VM panel credentials
+  </Step>
+
+  <Step title="Environment Separation">
+    Maintain separate `.env` files for different environments:
+    - `.env.development`
+    - `.env.production`
+    - `.env.test`
+  </Step>
+
+  <Step title="Secret Management">
+    Never commit `.env` files to version control. Use:
+    - `.gitignore` to exclude `.env`
+    - Environment variable managers (e.g., Docker secrets, Kubernetes secrets)
+    - Encrypted secret storage for production
+  </Step>
+
+  <Step title="Regular Rotation">
+    Rotate sensitive credentials regularly:
+    - Bot tokens every 90 days
+    - Database passwords quarterly
+    - API keys as needed
+  </Step>
+</Steps>
+
+## Verification
+
+Verify your configuration:
+
+<CodeGroup>
+```bash Check Environment Variables
+# In your project directory
+cat .env
+```
+
+```bash Test Database Connection
+bunx prisma db pull
+```
+
+```bash Validate TypeScript Config
+bunx tsc --noEmit
+```
+</CodeGroup>
+
+## Next Steps
+
+With configuration complete, you can:
+
+- [Core Features](/features/virtualization) - Explore BotTroner's capabilities
+- [Commands Guide](/guides/commands) - Learn about available commands
+- [Architecture Overview](/architecture/overview) - Understand the bot's structure

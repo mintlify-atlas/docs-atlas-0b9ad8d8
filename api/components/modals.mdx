@@ -1,0 +1,299 @@
+---
+title: Modals
+description: Modal components for collecting user input in BotTroner
+---
+
+## Overview
+
+Modals in BotTroner provide form-based interfaces for collecting structured user input. They are triggered by buttons or select menus and contain text input fields.
+
+## Available Modals
+
+<Tabs>
+  <Tab title="Ticket Modals">
+    ### Ticket Creation Modal
+    
+    Collects information to create a new support ticket.
+    
+    **Custom ID:** `ticket-modal_{ticketType}`
+    
+    **Location:** `src/components/tickets-modals/ticket.ts:8`
+    
+    **Optional Parameters:**
+    - `ticketType` (number): The category ID for the ticket
+    
+    **Input Fields:**
+    1. **Language Input**
+       - Custom ID: `lang`
+       - Label: "idioma que hablas ?| lang to speak?"
+       - Style: Short
+       - Max Length: 10 characters
+       - Expected format: Language code (e.g., "es-ES", "en-US")
+    
+    2. **Description Input**
+       - Custom ID: `description`
+       - Label: "descripcion del motivo del ticket?"
+       - Style: Paragraph
+       - Min Length: 20 characters
+    
+    **Example Usage:**
+    ```typescript
+    const modal = new ModalBuilder()
+      .setCustomId(`ticket-modal_${ticketType}`)
+      .setTitle('Sistema de tickets');
+
+    const langInput = new TextInputBuilder()
+      .setCustomId('lang')
+      .setLabel("idioma que hablas ?| lang to speak?")
+      .setMaxLength(10)
+      .setStyle(TextInputStyle.Short);
+
+    const descInput = new TextInputBuilder()
+      .setCustomId('description')
+      .setLabel("descripcion del motivo del ticket?")
+      .setMinLength(20)
+      .setStyle(TextInputStyle.Paragraph);
+
+    const firstActionRow = new ActionRowBuilder<TextInputBuilder>()
+      .addComponents(langInput);
+    const secondActionRow = new ActionRowBuilder<TextInputBuilder>()
+      .addComponents(descInput);
+
+    modal.addComponents(firstActionRow, secondActionRow);
+    await interaction.showModal(modal);
+    ```
+    
+    **Interaction Flow:**
+    1. User submits the modal
+    2. Handler retrieves field values
+    3. Validates language format (must contain "-")
+    4. Calls `client.ticket.newTicket()` to create the ticket
+    5. Replies with success message or error
+    
+    **Triggered By:** `categ-ticket` select menu (`src/components/tickets-selectmenu/categ.ts:12`)
+    
+    ---
+    
+    ### Ticket Opinion Modal
+    
+    Collects user feedback about ticket resolution.
+    
+    **Custom ID:** `ticket-suggest-modal_{guildId}`
+    
+    **Location:** `src/components/tickets-modals/ticket-opinion.ts:6`
+    
+    **Optional Parameters:**
+    - `guildId` (string): The guild identifier
+    
+    **Input Fields:**
+    1. **Opinion Input**
+       - Custom ID: `opinion`
+       - Label: "opinion de la resolucion del ticket"
+       - Style: Short
+       - Max Length: 255 characters
+    
+    **Example Usage:**
+    ```typescript
+    const modal = new ModalBuilder()
+      .setCustomId(`ticket-suggest-modal_${guildId}`)
+      .setTitle('Sistema de tickets (opinion)');
+
+    const opinionInput = new TextInputBuilder()
+      .setCustomId('opinion')
+      .setLabel("opinion de la resolucion del ticket")
+      .setMaxLength(255)
+      .setStyle(TextInputStyle.Short);
+
+    const firstActionRow = new ActionRowBuilder<TextInputBuilder>()
+      .addComponents(opinionInput);
+
+    modal.addComponents(firstActionRow);
+    await interaction.showModal(modal);
+    ```
+    
+    **Interaction Flow:**
+    1. User submits the modal
+    2. Handler defers the reply (ephemeral)
+    3. Retrieves the ticket opinions channel from the database
+    4. Creates an embed with the user's opinion
+    5. Sends the embed to the opinions channel
+    6. Closes the ticket via `client.ticket.close()`
+    
+    **Triggered By:** `ticket-show-opinion` button (`src/components/tickets-buttons/show-opinion.ts:16`)
+  </Tab>
+  
+  <Tab title="Announcement Modals">
+    ### Announcement Creation Modal
+    
+    Collects announcement content for server announcements.
+    
+    **Custom ID:** `announce-modal_{channelId}`
+    
+    **Location:** `src/components/announce-modals/announce-modal.ts:6`
+    
+    **Optional Parameters:**
+    - `channelId` (string): The target channel for the announcement
+    
+    **Input Fields:**
+    1. **Title Input**
+       - Custom ID: `title`
+       - Label: Title of the announcement
+       - Style: Short
+    
+    2. **Message Input**
+       - Custom ID: `message`
+       - Label: Announcement content
+       - Style: Paragraph
+    
+    **Special Message Formatting:**
+    
+    The message field supports special syntax:
+    
+    - **Fields:** Lines starting with `#` create embed fields
+      ```
+      # Field Title
+      Field content here
+      ```
+    
+    - **Images:** Use `[image]` tag followed by an image URL
+      ```
+      [image]https://example.com/image.png
+      ```
+    
+    **Example Usage:**
+    ```typescript
+    const modal = new ModalBuilder()
+      .setCustomId(`announce-modal_${channelId}`)
+      .setTitle('Crear Anuncio');
+
+    const titleInput = new TextInputBuilder()
+      .setCustomId('title')
+      .setLabel('Título del Anuncio')
+      .setStyle(TextInputStyle.Short);
+
+    const messageInput = new TextInputBuilder()
+      .setCustomId('message')
+      .setLabel('Contenido del Anuncio')
+      .setStyle(TextInputStyle.Paragraph);
+
+    modal.addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(titleInput),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(messageInput)
+    );
+
+    await interaction.showModal(modal);
+    ```
+    
+    **Interaction Flow:**
+    1. User submits the modal
+    2. Handler generates a unique hash for the announcement
+    3. Parses the message for special formatting (fields, images)
+    4. Stores announcement data in `client.announcements` map
+    5. Sets a 5-minute timeout to auto-delete unconfirmed announcements
+    6. Creates a preview embed
+    7. Replies with preview and confirmation buttons
+    8. User can confirm or cancel via buttons
+    
+    **Confirmation Buttons:**
+    - `announce-confirm_{hash}` - Sends the announcement
+    - `announce-cancel_{hash}` - Cancels the announcement
+  </Tab>
+</Tabs>
+
+## Creating Custom Modals
+
+To create a new modal component:
+
+1. Create a new file in the appropriate category folder (e.g., `src/components/my-category-modals/`)
+2. Export the required properties:
+
+```typescript
+import type { modalsType } from "@dTypes/components";
+import { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } from "discord.js";
+
+export const data: modalsType["data"] = {
+    name: "my-modal",
+}
+
+export const optionalParams: modalsType["optionalParams"] = {
+    customParam: "" // Optional: define parameters
+}
+
+export const type: modalsType["type"] = "modals";
+
+export const run: modalsType["run"] = async ({ interaction, client, optionalParams }) => {
+    // Extract field values
+    const fields = interaction.fields;
+    const value = fields.getTextInputValue("fieldId");
+    
+    // Process the submission
+    await interaction.reply({
+        content: "Modal submitted!",
+        ephemeral: true
+    });
+}
+```
+
+3. The modal will be automatically loaded by the component handler
+
+## Showing Modals
+
+Modals are typically shown in response to button clicks or select menu interactions:
+
+```typescript
+// In a button handler
+export const run: Buttons["run"] = async ({ interaction, client }) => {
+    const modal = new ModalBuilder()
+        .setCustomId('my-modal_param')
+        .setTitle('My Modal Title');
+
+    const input = new TextInputBuilder()
+        .setCustomId('input')
+        .setLabel('Enter something')
+        .setStyle(TextInputStyle.Short);
+
+    modal.addComponents(
+        new ActionRowBuilder<TextInputBuilder>().addComponents(input)
+    );
+
+    await interaction.showModal(modal);
+}
+```
+
+## Modal Naming Convention
+
+Modal custom IDs follow this pattern:
+```
+{category}-modal_{optionalParams}
+```
+
+Examples:
+- `ticket-modal_1` - Ticket modal with category ID 1
+- `ticket-suggest-modal_123456789` - Opinion modal for guild 123456789
+- `announce-modal_987654321` - Announcement modal for channel 987654321
+
+## Best Practices
+
+1. **Validate input** - Always validate user input before processing
+2. **Use appropriate text styles** - Short for single-line, Paragraph for multi-line
+3. **Set length constraints** - Use minLength and maxLength appropriately
+4. **Provide clear labels** - Help users understand what input is expected
+5. **Handle errors gracefully** - Show user-friendly error messages
+6. **Use ephemeral responses** - Keep modal responses private when appropriate
+7. **Defer replies for slow operations** - Use `deferReply()` for database operations
+
+## Text Input Styles
+
+- **Short:** Single-line input, ideal for names, IDs, or short text
+- **Paragraph:** Multi-line input, ideal for descriptions or longer content
+
+## Field Value Retrieval
+
+```typescript
+const fields = interaction.fields;
+
+// Get a single field value
+const value = fields.getTextInputValue("fieldId");
+
+// Field IDs must match the setCustomId() value from the TextInputBuilder
+```

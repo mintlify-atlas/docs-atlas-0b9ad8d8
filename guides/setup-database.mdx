@@ -1,0 +1,303 @@
+---
+title: Database Setup
+description: Learn how to configure and set up the MySQL database for BotTroner using Prisma ORM
+---
+
+BotTroner uses **Prisma ORM** with **MySQL** to manage all persistent data including guilds, tickets, VM panels, and permissions.
+
+## Prerequisites
+
+Before setting up the database, ensure you have:
+
+- MySQL 5.7 or higher (or MariaDB 10.3+)
+- Node.js/Bun installed
+- Access to a MySQL server (local or remote)
+
+## Database Schema Overview
+
+BotTroner's database includes the following main tables:
+
+- **guilds** - Server configuration and settings
+- **tickets** & **tickets_categories** - Ticket system data
+- **virtualization_panels** - VM panel configurations
+- **vm_monitors**, **vm_permissions**, **vm_action_logs** - VM management
+- **perfils** & **permisos** - Role-based permissions system
+- **traducciones** - Multi-language support
+
+## Setup Steps
+
+<Steps>
+
+### Install Dependencies
+
+First, install all required packages including Prisma:
+
+```bash
+bun install
+```
+
+This will install:
+- `prisma` - Prisma CLI
+- `@prisma/client` - Prisma Client
+- `@prisma/adapter-mariadb` - MariaDB adapter
+
+### Configure Database Connection
+
+Create a `.env` file in the project root based on `.env.example`:
+
+```bash
+cp .env.example .env
+```
+
+Edit the `.env` file and set your database connection string:
+
+```bash .env
+# Discord Bot Configuration
+DISCORD_TOKEN=your_discord_bot_token_here
+
+# Database Configuration
+DATABASE_URL="mysql://user:password@localhost:3306/bottroner"
+
+# Environment
+NODE_ENV=development
+
+# Logging
+LOG_LEVEL=info
+```
+
+<Warning>
+**Security Notice:** Never commit your `.env` file to version control. It contains sensitive credentials.
+</Warning>
+
+### Understanding the Prisma Configuration
+
+The Prisma schema is defined in `prisma/schema.prisma` and uses MySQL as the datasource:
+
+```prisma prisma/schema.prisma
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+```
+
+The configuration file `prisma.config.ts` loads the connection from environment variables:
+
+```typescript prisma.config.ts
+import 'dotenv/config'
+import type { PrismaConfig } from "prisma";
+import { env } from "prisma/config";
+
+export default {
+  schema: "prisma/schema.prisma",
+  migrations: {
+    path: "prisma/migrations",
+  },
+  datasource: { 
+    url: env("DATABASE_URL") 
+  }
+} satisfies PrismaConfig;
+```
+
+### Create the Database
+
+If your database doesn't exist yet, create it:
+
+```sql
+CREATE DATABASE bottroner CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
+<Tip>
+Using `utf8mb4` encoding ensures proper support for emojis and special characters in Discord messages.
+</Tip>
+
+### Push Schema to Database
+
+Push the Prisma schema to your database to create all tables:
+
+```bash
+bun run update:db
+```
+
+Or use Prisma directly:
+
+```bash
+prisma db push
+```
+
+This command will:
+1. Read the schema from `prisma/schema.prisma`
+2. Connect to your database using `DATABASE_URL`
+3. Create all tables, indexes, and relationships
+
+### Verify the Setup
+
+Check that all tables were created successfully:
+
+```sql
+USE bottroner;
+SHOW TABLES;
+```
+
+You should see tables like:
+- `guilds`
+- `tickets`
+- `tickets_categories`
+- `virtualization_panels`
+- `vm_monitors`
+- `vm_permissions`
+- `perfils`
+- `permisos`
+- And more...
+
+### Generate Prisma Client
+
+Generate the Prisma Client (usually done automatically):
+
+```bash
+prisma generate
+```
+
+The client will be generated to `generated/prisma` as specified in the schema.
+
+</Steps>
+
+## Key Database Models
+
+### Guilds Table
+
+Stores Discord server configurations:
+
+```prisma
+model guilds {
+  id                    String   @id @db.VarChar(25)
+  lang                  String?  @default("es-es")
+  TicketChannel         String?  @db.VarChar(30)
+  TicketTranscripts     String?  @db.VarChar(30)
+  TicketMsg             String?  @db.VarChar(30)
+  TicketOpinions        String?  @db.VarChar(30)
+  proxmoxLogs           String?  @db.VarChar(30)
+  // Relations
+  mail                  mail?
+  perfils               perfils[]
+  virtualization_panels virtualization_panels[]
+}
+```
+
+### Virtualization Panels
+
+Stores VM panel configurations with encrypted credentials:
+
+```prisma
+model virtualization_panels {
+  id          Int      @id @default(autoincrement())
+  guildId     String
+  name        String   @db.VarChar(50)
+  type        String   @db.VarChar(20)  // 'proxmox', 'vmware', etc.
+  apiUrl      String   @db.VarChar(255)
+  credentials Json     // Encrypted credentials
+  config      Json?    // Provider-specific config
+  active      Boolean  @default(true)
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+```
+
+### Tickets System
+
+Stores ticket information:
+
+```prisma
+model tickets {
+  id         Int      @id @default(autoincrement())
+  guildId    String   @db.VarChar(25)
+  channelId  String   @db.VarChar(25)
+  usrId      String   @db.VarChar(25)
+  category   Int
+  transcript String?  @db.Text
+  closed     Boolean  @default(false)
+  CreatedAt  DateTime @default(now())
+}
+```
+
+## Database Maintenance
+
+### Backup Your Database
+
+Regularly backup your database:
+
+```bash
+mysqldump -u username -p bottroner > backup.sql
+```
+
+### Update Schema
+
+When the schema changes, push updates:
+
+```bash
+bun run update:db
+```
+
+### Reset Database (Development Only)
+
+<Warning>
+**DANGER:** This will delete all data!
+</Warning>
+
+```bash
+prisma db push --force-reset
+```
+
+## Troubleshooting
+
+### Connection Issues
+
+**Problem:** `Error: Can't reach database server`
+
+**Solution:**
+1. Verify MySQL is running: `systemctl status mysql`
+2. Check credentials in `.env`
+3. Ensure MySQL port (3306) is accessible
+4. Test connection: `mysql -u username -p -h localhost`
+
+### Permission Errors
+
+**Problem:** `Access denied for user`
+
+**Solution:** Grant proper permissions:
+
+```sql
+GRANT ALL PRIVILEGES ON bottroner.* TO 'username'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+### Schema Sync Issues
+
+**Problem:** Schema out of sync
+
+**Solution:** Force push the schema:
+
+```bash
+prisma db push --force-reset
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Setup VM Panel" icon="server" href="/guides/setup-vm-panel">
+    Configure virtualization panels for VM management
+  </Card>
+  <Card title="Setup Tickets" icon="ticket" href="/guides/setup-ticket-system">
+    Set up the ticket support system
+  </Card>
+</CardGroup>
+
+## Additional Resources
+
+- [Prisma Documentation](https://www.prisma.io/docs)
+- [MySQL Documentation](https://dev.mysql.com/doc/)
+- Database Schema: `~/workspace/source/prisma/schema.prisma`

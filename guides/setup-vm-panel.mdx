@@ -1,0 +1,450 @@
+---
+title: VM Panel Setup
+description: Configure and manage virtualization panels for Proxmox and other hypervisors
+---
+
+BotTroner includes a powerful virtualization management system that supports multiple hypervisor types. Currently, **Proxmox VE** is fully supported with a modular architecture ready for VMware, Hyper-V, and other providers.
+
+## Architecture Overview
+
+The virtualization system consists of:
+
+- **VirtualizationManager** - Main orchestrator for all VM operations
+- **Providers** - Hypervisor-specific implementations (ProxmoxProvider, etc.)
+- **VirtualizationMonitor** - Real-time VM status monitoring
+- **Database Models** - Panel configs, permissions, action logs
+
+## Prerequisites
+
+- BotTroner installed and running
+- Database configured (see [Database Setup](/guides/setup-database))
+- A Proxmox VE server (or other supported hypervisor)
+- API credentials for your virtualization platform
+
+## Supported Providers
+
+Currently available:
+- **Proxmox VE** 8.x - Full support
+
+Coming soon:
+- VMware vSphere/ESXi
+- Microsoft Hyper-V
+- OpenStack
+
+## Setup Steps
+
+<Steps>
+
+### Create API Token (Proxmox)
+
+First, create an API token in your Proxmox server:
+
+1. Log into Proxmox web interface
+2. Navigate to **Datacenter → Permissions → API Tokens**
+3. Click **Add** and create a token:
+   - **User**: Select an appropriate user (e.g., `root@pam`)
+   - **Token ID**: Give it a name (e.g., `bottroner`)
+   - **Privilege Separation**: Uncheck if you want full permissions
+4. **Important:** Copy the full token (format: `USER@REALM!TOKENID=SECRET`)
+
+Example token:
+```
+root@pam!bottroner=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+```
+
+<Warning>
+**Security:** Store this token securely. You won't be able to see it again!
+</Warning>
+
+### Add Panel via Discord
+
+Use the `/vm panel new` command to register your panel:
+
+```
+/vm panel new
+  name: "Production Proxmox"
+  url: "192.168.1.100:8006"
+  api-key: "root@pam!bottroner=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+  provider: "proxmox"
+```
+
+**Parameters:**
+- `name` - Friendly name for the panel
+- `url` - Panel URL (without `https://`)
+- `api-key` - Your API token
+- `provider` - Provider type (autocomplete available)
+
+### Verify Connection
+
+The bot will automatically:
+1. Validate credentials
+2. Test connection to the panel
+3. Encrypt and store credentials
+4. Set as default (if first panel)
+
+You'll receive a confirmation message if successful.
+
+### List Your Panels
+
+View all registered panels:
+
+```
+/vm panel list
+```
+
+This shows:
+- Panel ID
+- Name
+- Provider type
+- URL
+- Status (active/inactive)
+- Default flag
+
+### Get Panel Info
+
+View detailed information about a specific panel:
+
+```
+/vm panel info panel: [select-panel-id]
+```
+
+This displays:
+- System version
+- Connected nodes
+- Resource usage (CPU, memory)
+- Available features
+- Uptime
+
+</Steps>
+
+## VM Management
+
+### List Virtual Machines
+
+View all VMs from a panel:
+
+```
+/vm list panel: [optional-panel-id]
+```
+
+Shows:
+- VM ID and name
+- Current status (running/stopped/paused)
+- Node location
+- CPU and memory usage
+- Network traffic
+- VM type (KVM/LXC)
+
+### Check VM Status
+
+Get detailed status of a specific VM:
+
+```
+/vm status panel: [panel-id] vm-id: [vm-id]
+```
+
+Displays:
+- Current state
+- Resource usage statistics
+- Uptime
+- Network information
+
+### Execute VM Actions
+
+Perform actions on VMs:
+
+```
+/vm action panel: [panel-id] vm-id: [vm-id] action: [start/stop/restart]
+```
+
+**Available actions:**
+- `start` - Power on the VM
+- `stop` - Graceful shutdown
+- `restart` - Reboot the VM
+- `pause` - Pause/suspend VM
+- `resume` - Resume from pause
+- `reset` - Hard reset
+
+<Warning>
+**Permissions Required:** Users need appropriate VM permissions to execute actions (see Permissions section).
+</Warning>
+
+## VM Monitoring
+
+### Start Monitoring
+
+Create an interactive monitor panel for a user:
+
+```
+/vm monitor start
+  panel: [panel-id]
+  vm-id: [vm-id]
+  user: @username
+```
+
+This creates an embedded message with:
+- Real-time VM status
+- Interactive buttons (Start, Stop, Restart, etc.)
+- Auto-updating stats
+- Action history
+
+The monitor message updates automatically every 30 seconds.
+
+### Stop Monitoring
+
+Remove a monitor panel:
+
+```
+/vm monitor stop panel: [panel-id] vm-id: [vm-id]
+```
+
+## Permission System
+
+BotTroner includes granular VM permissions stored in the `vm_permissions` table.
+
+### Grant VM Permissions
+
+Permissions are managed through the database:
+
+```sql
+INSERT INTO vm_permissions (vmId, userId, permissions, grantedBy)
+VALUES (
+  '100',                    -- VM ID
+  '123456789012345678',     -- Discord User ID
+  '["start", "stop", "restart", "stats"]',  -- Permissions array
+  '987654321098765432'      -- Admin User ID
+);
+```
+
+**Available permissions:**
+- `*` - All permissions (admin)
+- `start` - Power on VM
+- `stop` - Shutdown VM
+- `restart` - Reboot VM
+- `console` - Access console
+- `stats` - View statistics
+
+### Permission Check Flow
+
+When a user tries to execute an action:
+
+1. `VirtualizationManager.checkVMPermission()` is called
+2. Queries `vm_permissions` table for user+VM
+3. Checks if action is in allowed permissions array
+4. Returns true/false
+5. Action is executed or denied
+6. Result logged to `vm_action_logs`
+
+See implementation in `~/workspace/source/src/class/virtualization/VirtualizationManager.ts:484`
+
+## Action Logging
+
+All VM actions are automatically logged to `vm_action_logs` table:
+
+```typescript
+await this.logVMAction({
+  vmId: action.vmId,
+  userId: userId,
+  action: action.type,
+  status: result.success ? "success" : "error",
+  error: result.error,
+  details: result.data
+});
+```
+
+View logs:
+
+```sql
+SELECT * FROM vm_action_logs 
+WHERE vmId = '100' 
+ORDER BY executedAt DESC 
+LIMIT 50;
+```
+
+## Provider Architecture
+
+The system uses a provider pattern for extensibility.
+
+### Base Provider Interface
+
+All providers implement `IVirtualizationProvider`:
+
+```typescript
+interface IVirtualizationProvider {
+  connect(apiUrl: string, credentials: PanelCredentials): Promise<boolean>;
+  disconnect(): Promise<void>;
+  testConnection(): Promise<boolean>;
+  listVMs(): Promise<VMStatus[]>;
+  getVM(vmId: string): Promise<VMStatus | null>;
+  executeAction(action: VMAction): Promise<VMActionResult>;
+  getSystemInfo(): Promise<any>;
+}
+```
+
+### Proxmox Provider
+
+The `ProxmoxProvider` class (`~/workspace/source/src/class/virtualization/providers/ProxmoxProvider.ts`) implements:
+
+- **Token Authentication** - Using PVEAPIToken
+- **User/Password Auth** - With ticket-based sessions
+- **VM Discovery** - Scans all nodes for QEMU and LXC containers
+- **Action Mapping** - Translates generic actions to Proxmox API calls
+- **Error Handling** - Comprehensive error types
+
+Example action execution:
+
+```typescript
+const endpoint = `/api2/json/nodes/${node}/qemu/${vmId}/status/${action}`;
+const response = await this.makeRequest('POST', endpoint);
+```
+
+### Adding New Providers
+
+To add support for a new hypervisor:
+
+1. Create new provider class extending `BaseProvider`
+2. Implement all required methods
+3. Register in `VirtualizationManager.initializeProviders()`:
+
+```typescript
+this.providers.set('vmware', new VMwareProvider());
+this.providers.set('hyperv', new HyperVProvider());
+```
+
+## Configuration Options
+
+Panels support additional configuration in the `config` JSON field:
+
+```typescript
+{
+  cache: {
+    enabled: true,
+    ttl: 30000  // 30 seconds
+  },
+  nodes: ['node1', 'node2'],  // Specific nodes to monitor
+  features: ['snapshots', 'console']  // Enabled features
+}
+```
+
+## Security Features
+
+### Credential Encryption
+
+All panel credentials are encrypted before storage:
+
+```typescript
+import { encrypt, decrypt } from "@utils/crypto";
+
+// Storing
+const encrypted = encrypt(JSON.stringify(credentials));
+await prisma.virtualization_panels.create({
+  data: { credentials: encrypted }
+});
+
+// Retrieving
+const decrypted = JSON.parse(decrypt(panel.credentials));
+```
+
+### HTTPS Enforcement
+
+All API calls use HTTPS by default. For development:
+
+<Warning>
+**Development Only:** Set `NODE_TLS_REJECT_UNAUTHORIZED=0` to bypass SSL verification. Never use in production!
+</Warning>
+
+## Troubleshooting
+
+### Connection Failed
+
+**Problem:** "Failed to connect to panel"
+
+**Solutions:**
+1. Verify panel URL is accessible: `curl https://panel-url:8006`
+2. Check API token is valid in Proxmox UI
+3. Ensure firewall allows connections on port 8006
+4. Check logs: Look for errors in bot console
+
+### Authentication Failed
+
+**Problem:** "Invalid credentials"
+
+**Solutions:**
+1. Regenerate API token in Proxmox
+2. Verify token format: `USER@REALM!TOKENID=SECRET`
+3. Check user permissions in Proxmox
+4. Ensure privilege separation is configured correctly
+
+### VM Not Found
+
+**Problem:** "VM not found" when executing actions
+
+**Solutions:**
+1. Verify VM ID exists: `/vm list`
+2. Check VM is on a connected node
+3. Refresh VM cache by re-listing VMs
+4. Verify panel connection is active
+
+### Permission Denied
+
+**Problem:** "No tienes permiso para realizar esta acción"
+
+**Solutions:**
+1. Check user has VM permissions in database
+2. Grant permissions via SQL INSERT
+3. Verify VM ID matches exactly
+4. Check permission string format is correct JSON array
+
+## Advanced Usage
+
+### Multiple Panels
+
+Manage multiple Proxmox clusters:
+
+```
+/vm panel new name: "Production" ...
+/vm panel new name: "Development" ...
+/vm panel new name: "Testing" ...
+```
+
+Switch between panels using the `panel` parameter in commands.
+
+### Default Panel
+
+Set a panel as default to avoid specifying it every time:
+
+```sql
+UPDATE virtualization_panels 
+SET isDefault = true 
+WHERE id = 1;
+```
+
+### Remove Panels
+
+Delete a panel configuration:
+
+```
+/vm panel delete panel: [panel-id]
+```
+
+<Warning>
+This will also delete all associated monitors and logs!
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Commands Reference" icon="terminal" href="/guides/commands">
+    Complete list of all available commands
+  </Card>
+  <Card title="Setup Tickets" icon="ticket" href="/guides/setup-ticket-system">
+    Configure the support ticket system
+  </Card>
+</CardGroup>
+
+## Code References
+
+- VirtualizationManager: `~/workspace/source/src/class/virtualization/VirtualizationManager.ts`
+- ProxmoxProvider: `~/workspace/source/src/class/virtualization/providers/ProxmoxProvider.ts`
+- VM Command: `~/workspace/source/src/commands/virtualization/vm.ts`
+- Database Schema: `~/workspace/source/prisma/schema.prisma:74-127`

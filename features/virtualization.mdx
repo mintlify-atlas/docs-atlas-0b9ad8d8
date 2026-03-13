@@ -1,0 +1,382 @@
+---
+title: Virtualization Management
+description: Manage virtual machines from Discord with support for Proxmox and other virtualization platforms
+icon: server
+---
+
+The Virtualization feature allows you to manage and monitor virtual machines directly from Discord. BotTroner provides a comprehensive interface for controlling VMs, monitoring their status in real-time, and managing multiple virtualization panels.
+
+## Overview
+
+BotTroner's virtualization system is built with a modular provider architecture, currently supporting Proxmox VE with the ability to extend to other platforms like VMware, Hyper-V, or OpenStack in the future.
+
+<CardGroup cols={2}>
+  <Card title="Multi-Panel Support" icon="layer-group">
+    Connect multiple virtualization panels per server
+  </Card>
+  <Card title="Real-Time Monitoring" icon="chart-line">
+    Live VM status updates every 5 seconds
+  </Card>
+  <Card title="Permission Control" icon="shield">
+    Fine-grained user permissions per VM
+  </Card>
+  <Card title="Action Logging" icon="file-lines">
+    Track all VM actions with full audit trail
+  </Card>
+</CardGroup>
+
+## Architecture
+
+The virtualization system consists of three main components:
+
+### VirtualizationManager
+
+The core manager handles connections to multiple panels and coordinates all VM operations:
+
+```typescript
+// From: src/class/virtualization/VirtualizationManager.ts
+export class VirtualizationManager {
+    private providers: Map<string, IVirtualizationProvider> = new Map();
+    private panelProviders: Map<number, IVirtualizationProvider> = new Map();
+    public monitor: VirtualizationMonitor | null = null;
+    
+    async connectToPanel(panelId: number): Promise<ManagerResult<IVirtualizationProvider>>
+    async listVMs(panelId: number): Promise<ManagerResult<VMStatus[]>>
+    async executeVMAction(panelId: number, action: VMAction, userId: string): Promise<ManagerResult<VMActionResult>>
+}
+```
+
+### ProxmoxProvider
+
+Implements the virtualization interface for Proxmox VE:
+
+```typescript
+// From: src/class/virtualization/providers/ProxmoxProvider.ts
+export class ProxmoxProvider extends BaseVirtualizationProvider {
+    // Supports both token and username/password authentication
+    async listVMs(): Promise<VMStatus[]>
+    async getVM(vmId: string): Promise<VMStatus | null>
+    async executeAction(action: VMAction): Promise<VMActionResult>
+    async getSystemInfo(): Promise<any>
+}
+```
+
+### VirtualizationMonitor
+
+Provides real-time monitoring with automatic message updates:
+
+```typescript
+// From: src/class/virtualization/VirtualizationMonitor.ts
+export class VirtualizationMonitor {
+    private readonly UPDATE_INTERVAL = 5000; // 5 seconds
+    
+    public async addMonitor(entry: MonitorEntry)
+    public async removeMonitor(messageId: string)
+}
+```
+
+## Commands
+
+### `/vm list`
+
+List all virtual machines from your connected panels.
+
+**Options:**
+- `panel` (optional) - Filter by specific panel ID
+
+**Example:**
+```
+/vm list panel:1
+```
+
+<Tip>
+The list command supports pagination and displays VMs sorted by node and ID.
+</Tip>
+
+### `/vm status`
+
+View detailed status information for a specific VM.
+
+**Options:**
+- `panel` (required) - Panel ID
+- `vm-id` (required) - Virtual machine ID
+
+**Example:**
+```
+/vm status panel:1 vm-id:100
+```
+
+**Information displayed:**
+- VM name and ID
+- Node location
+- VM type (KVM/LXC)
+- Status (running/stopped/paused)
+- CPU usage percentage
+- Memory usage
+- Network traffic (RX/TX)
+
+### `/vm action`
+
+Execute control actions on a virtual machine.
+
+**Options:**
+- `panel` (required) - Panel ID
+- `vm-id` (required) - Virtual machine ID
+- `action` (required) - Action to perform
+
+**Available actions:**
+- **start** - Start the VM
+- **stop** - Stop the VM
+- **restart** - Reboot the VM
+- **pause** - Pause execution
+- **resume** - Resume from pause
+- **reset** - Hard reset
+
+**Example:**
+```
+/vm action panel:1 vm-id:100 action:start
+```
+
+<Note>
+All actions are permission-controlled and logged to the database with user ID, timestamp, and result.
+</Note>
+
+### `/vm monitor start`
+
+Start real-time monitoring of a VM with live updates.
+
+**Options:**
+- `panel` (required) - Panel ID
+- `vm-id` (required) - Virtual machine ID
+- `user` (required) - User who will receive the monitoring panel
+
+**Example:**
+```
+/vm monitor start panel:1 vm-id:100 user:@John
+```
+
+The monitor creates a message that automatically updates every 5 seconds with:
+- Current VM status
+- CPU and memory usage
+- Network statistics
+- Interactive control buttons
+
+### `/vm monitor stop`
+
+Stop monitoring a virtual machine.
+
+**Options:**
+- `panel` (required) - Panel ID
+- `vm-id` (required) - Virtual machine ID
+
+**Example:**
+```
+/vm monitor stop panel:1 vm-id:100
+```
+
+## Panel Management
+
+### `/vm panel list`
+
+Display all configured virtualization panels.
+
+### `/vm panel info`
+
+View detailed information about a specific panel.
+
+**Options:**
+- `panel` (required) - Panel ID
+
+### `/vm panel new`
+
+Add a new virtualization panel to your server.
+
+**Options:**
+- `name` (required) - Friendly name for the panel
+- `url` (required) - Panel URL (without https://)
+- `api-key` (required) - API authentication key
+- `provider` (required) - Provider type (currently: proxmox)
+
+**Example:**
+```
+/vm panel new name:"Production" url:"proxmox.example.com" api-key:"user@pam!token=xxx" provider:proxmox
+```
+
+<Tip>
+**For Proxmox:**
+
+API tokens are recommended over username/password. Create a token in Proxmox:
+1. Go to Datacenter → Permissions → API Tokens
+2. Add a new token
+3. Use format: `user@realm!tokenname=secret`
+</Tip>
+
+### `/vm panel delete`
+
+Remove a panel from your configuration.
+
+**Options:**
+- `panel` (required) - Panel ID to delete
+
+## Permissions System
+
+The virtualization system includes a granular permission model:
+
+```typescript
+// From: src/class/virtualization/VirtualizationManager.ts:484
+async checkVMPermission(userId: string, vmId: string, action: string): Promise<boolean> {
+    const perms = await this.prisma.vm_permissions.findMany({
+        where: { vmId: vmId, userId: userId }
+    });
+    
+    for (const p of perms) {
+        const allowed = p.permissions as any[];
+        if (Array.isArray(allowed)) {
+            if (allowed.includes("*") || allowed.includes(action)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+```
+
+**Permission types:**
+- `start` - Permission to start VMs
+- `stop` - Permission to stop VMs
+- `restart` - Permission to reboot VMs
+- `pause` - Permission to pause VMs
+- `resume` - Permission to resume VMs
+- `reset` - Permission to reset VMs
+- `*` - Wildcard for all actions
+
+## Security Features
+
+<Accordion title="Encrypted Credentials">
+All panel credentials are encrypted before storage using AES encryption:
+
+```typescript
+// From: src/class/virtualization/VirtualizationManager.ts:151
+const newPanel = await this.prisma.virtualization_panels.create({
+    data: {
+        credentials: encrypt(JSON.stringify(credentials))
+    }
+});
+```
+</Accordion>
+
+<Accordion title="Action Logging">
+Every VM action is logged with full audit trail:
+
+```typescript
+// From: src/class/virtualization/VirtualizationManager.ts:513
+async logVMAction(data: {
+    vmId: string,
+    userId: string,
+    action: string,
+    status: "success" | "pending" | "error",
+    error?: string,
+    details?: any
+})
+```
+</Accordion>
+
+<Accordion title="Permission Validation">
+All actions are validated against user permissions before execution:
+
+```typescript
+// From: src/class/virtualization/VirtualizationManager.ts:410
+const hasPermission = await this.checkVMPermission(userId, action.vmId, action.type);
+if (!hasPermission) {
+    return {
+        success: false,
+        error: "No tienes permiso para realizar esta acción."
+    };
+}
+```
+</Accordion>
+
+## Error Handling
+
+The system includes comprehensive error codes:
+
+```typescript
+export enum VirtualizationErrorCode {
+    CONNECTION_FAILED = "CONNECTION_FAILED",
+    AUTHENTICATION_FAILED = "AUTHENTICATION_FAILED",
+    VM_NOT_FOUND = "VM_NOT_FOUND",
+    ACTION_FAILED = "ACTION_FAILED",
+    VALIDATION_FAILED = "VALIDATION_FAILED",
+    UNKNOWN_ERROR = "UNKNOWN_ERROR"
+}
+```
+
+## Supported VM Types
+
+Proxmox provider supports:
+- **KVM** - Full virtualization VMs
+- **LXC** - Linux containers
+
+## Real-Time Monitoring Details
+
+The monitoring system maintains persistent state:
+
+- Monitors are saved to database and restored on bot restart
+- Update interval: 5 seconds
+- Automatic cleanup when messages are deleted
+- Supports multiple monitors per user
+- Uses Discord.js collectors for interactive buttons
+
+## Performance Optimization
+
+<CardGroup cols={2}>
+  <Card title="Connection Caching" icon="bolt">
+    Panel connections are cached and reused across requests
+  </Card>
+  <Card title="Optional Caching" icon="database">
+    VM lists can be cached with configurable TTL
+  </Card>
+</CardGroup>
+
+## Future Provider Support
+
+The architecture is designed for easy extension:
+
+```typescript
+// From: src/class/virtualization/VirtualizationManager.ts:36
+private initializeProviders(): void {
+    this.providers.set('proxmox', new ProxmoxProvider());
+    // Future: VMware, Hyper-V, OpenStack, etc.
+}
+```
+
+## Troubleshooting
+
+<Accordion title="Connection Failed">
+**Issue:** Cannot connect to panel
+
+**Solutions:**
+- Verify the URL is accessible from the bot's network
+- Check that the API key/token is valid
+- Ensure the Proxmox API is enabled
+- Verify firewall rules allow connections
+</Accordion>
+
+<Accordion title="Permission Denied">
+**Issue:** User cannot perform actions
+
+**Solutions:**
+- Check `vm_permissions` table for user entries
+- Verify the action type matches permission
+- Ensure user has appropriate Discord roles
+</Accordion>
+
+<Accordion title="Monitor Not Updating">
+**Issue:** Real-time monitor stopped updating
+
+**Solutions:**
+- Check if the monitor service is running
+- Verify the channel and message still exist
+- Review logs for connection errors
+- Restart monitoring with `/vm monitor stop` then start again
+</Accordion>

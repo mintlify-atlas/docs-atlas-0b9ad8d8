@@ -1,0 +1,179 @@
+---
+title: 'VM Commands'
+description: 'Manage virtual machines and virtualization panels'
+---
+
+# VM Commands
+
+The `/vm` command allows you to manage virtual machines, monitor their status, and control virtualization panels.
+
+## Subcommands
+
+### list
+
+List all available virtual machines.
+
+<ParamField path="panel" type="integer" optional>
+  ID of the virtualization panel to filter VMs (autocomplete enabled)
+</ParamField>
+
+**Example:**
+```
+/vm list
+/vm list panel:1
+```
+
+### status
+
+View the status of a specific virtual machine.
+
+<ParamField path="panel" type="integer" required>
+  ID of the virtualization panel (autocomplete enabled)
+</ParamField>
+
+<ParamField path="vm-id" type="string" required>
+  ID of the virtual machine (autocomplete enabled)
+</ParamField>
+
+**Example:**
+```
+/vm status panel:1 vm-id:vm-12345
+```
+
+### action
+
+Execute an action on a virtual machine.
+
+<ParamField path="panel" type="integer" required>
+  ID of the virtualization panel (autocomplete enabled)
+</ParamField>
+
+<ParamField path="vm-id" type="string" required>
+  ID of the virtual machine (autocomplete enabled)
+</ParamField>
+
+<ParamField path="action" type="string" required>
+  Action to execute on the VM. Available options:
+  - `start` - Start the VM
+  - `stop` - Stop the VM
+  - `restart` - Restart the VM
+  - `pause` - Pause the VM
+  - `resume` - Resume the VM
+  - `reset` - Reset the VM
+</ParamField>
+
+**Example:**
+```
+/vm action panel:1 vm-id:vm-12345 action:start
+/vm action panel:1 vm-id:vm-12345 action:restart
+```
+
+## Monitor Subcommand Group
+
+Manage VM monitoring for users.
+
+### monitor start
+
+Start monitoring a VM for a specific user.
+
+<ParamField path="panel" type="integer" required>
+  ID of the virtualization panel (autocomplete enabled)
+</ParamField>
+
+<ParamField path="vm-id" type="string" required>
+  ID of the virtual machine (autocomplete enabled)
+</ParamField>
+
+<ParamField path="user" type="user" required>
+  Discord user who will receive the monitoring panel
+</ParamField>
+
+**Example:**
+```
+/vm monitor start panel:1 vm-id:vm-12345 user:@username
+```
+
+### monitor stop
+
+Stop monitoring a VM.
+
+<ParamField path="panel" type="integer" required>
+  ID of the virtualization panel (autocomplete enabled)
+</ParamField>
+
+<ParamField path="vm-id" type="string" required>
+  ID of the virtual machine (autocomplete enabled)
+</ParamField>
+
+**Example:**
+```
+/vm monitor stop panel:1 vm-id:vm-12345
+```
+
+## Panel Subcommand Group
+
+Manage virtualization panels.
+
+### panel list
+
+List all virtualization panels.
+
+**Example:**
+```
+/vm panel list
+```
+
+### panel info
+
+View information about a specific virtualization panel.
+
+<ParamField path="panel" type="integer" required>
+  ID of the panel to query (autocomplete enabled)
+</ParamField>
+
+**Example:**
+```
+/vm panel info panel:1
+```
+
+### panel new
+
+Create a new virtualization panel.
+
+<ParamField path="name" type="string" required>
+  Name of the panel
+</ParamField>
+
+<ParamField path="url" type="string" required>
+  URL of the panel (without https://)
+</ParamField>
+
+<ParamField path="api-key" type="string" required>
+  API key for authentication
+</ParamField>
+
+<ParamField path="provider" type="string" required>
+  Virtualization provider (autocomplete enabled)
+</ParamField>
+
+**Example:**
+```
+/vm panel new name:"Production" url:"panel.example.com" api-key:"your-api-key" provider:"proxmox"
+```
+
+### panel delete
+
+Delete a virtualization panel.
+
+<ParamField path="panel" type="integer" required>
+  ID of the panel to delete (autocomplete enabled)
+</ParamField>
+
+**Example:**
+```
+/vm panel delete panel:1
+```
+
+## Source Code
+
+View the implementation: `~/workspace/source/src/commands/virtualization/vm.ts`
