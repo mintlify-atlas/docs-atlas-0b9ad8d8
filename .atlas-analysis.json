@@ -1,0 +1,116 @@
+{
+  "projectType": "general",
+  "projectName": "BotTroner",
+  "projectDescription": "Discord bot with modular architecture for VM management, ticketing system, and announcements",
+  "theme": "aspen",
+  "primaryColor": "#94cb04",
+  "lightColor": "#545454",
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "configuration"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/virtualization",
+              "features/tickets",
+              "features/announcements"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/setup-database",
+              "guides/setup-vm-panel",
+              "guides/setup-ticket-system",
+              "guides/commands"
+            ]
+          },
+          {
+            "group": "Architecture",
+            "pages": [
+              "architecture/overview",
+              "architecture/modular-system",
+              "architecture/database-schema"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Commands",
+            "pages": [
+              "api/commands/vm",
+              "api/commands/tickets",
+              "api/commands/announce",
+              "api/commands/basic"
+            ]
+          },
+          {
+            "group": "Components",
+            "pages": [
+              "api/components/buttons",
+              "api/components/modals",
+              "api/components/select-menus"
+            ]
+          },
+          {
+            "group": "Core Classes",
+            "pages": [
+              "api/classes/extended-client",
+              "api/classes/virtualization-manager",
+              "api/classes/ticket-system"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Virtual Machine Management - Control VMs with start/stop/restart actions via Discord",
+    "Advanced Ticket System - Professional support system with HTML transcripts and compression",
+    "Announcement Distribution - Modular system for broadcasting updates across channels",
+    "Modular Architecture - Automatic loading of commands, events, and components",
+    "Database Integration - Prisma ORM with MariaDB for robust data management",
+    "Real-time VM Monitoring - Track VM status and send alerts to users",
+    "Multi-language Support - Built-in translation system for internationalization"
+  ],
+  "publicApiSurface": [
+    "/vm list - List all available virtual machines",
+    "/vm status - Check VM status",
+    "/vm action - Execute actions (start/stop/restart/pause/resume/reset)",
+    "/vm monitor start - Start monitoring a VM for a user",
+    "/vm monitor stop - Stop monitoring a VM",
+    "/vm panel list - List all virtualization panels",
+    "/vm panel new - Create a new virtualization panel",
+    "/tickets new - Create a new ticket",
+    "/tickets close - Close a ticket",
+    "/tickets setup - Setup ticket system in a channel",
+    "/tickets config transcript - Configure transcript channel",
+    "/tickets config opinions - Configure opinions channel",
+    "/tickets category new - Create a ticket category",
+    "/tickets user add - Add user to ticket",
+    "/announce - Create and distribute announcements",
+    "/ping - Check bot latency",
+    "/sync - Sync commands with Discord",
+    "ExtendedClient - Main bot client with modular loaders",
+    "VirtualizationManager - Manage VM panels and operations",
+    "VirtualizationMonitor - Monitor VM status changes",
+    "Tickets - Ticket system management",
+    "CommandsLoader - Automatic command loading system",
+    "EventsLoader - Automatic event loading system",
+    "ComponentsLoader - Automatic component loading system"
+  ]
+}
